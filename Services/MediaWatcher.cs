@@ -115,6 +115,32 @@ namespace DesktopDock.Services
         /// 不能只用 GetCurrentSession() —— QQ音乐/部分播放器不抢 CurrentSession，
         /// 系统会把"当前"停留在上一个已经停掉的播放器上，结果明明在放却显示未在播放。
         /// </summary>
+        /// <summary>
+        /// 判断一个会话是否"真的在放"。
+        /// 光看 PlaybackStatus 不够：浏览器、某些播放器会留下一直报 Playing 的幽灵会话，
+        /// 位置却不再推进。真正在播的会话 timeline 会持续刷新，所以再加一条时间新鲜度判据。
+        /// </summary>
+        private static bool IsLivePlaying(GlobalSystemMediaTransportControlsSession s)
+        {
+            try
+            {
+                if (s.GetPlaybackInfo().PlaybackStatus !=
+                    GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
+                    return false;
+
+                var tl = s.GetTimelineProperties();
+                var age = DateTimeOffset.Now - tl.LastUpdatedTime;
+                return age >= TimeSpan.Zero && age < TimeSpan.FromSeconds(15);
+            }
+            catch { return false; }
+        }
+
+        private static DateTimeOffset LastActive(GlobalSystemMediaTransportControlsSession s)
+        {
+            try { return s.GetTimelineProperties().LastUpdatedTime; }
+            catch { return DateTimeOffset.MinValue; }
+        }
+
         private GlobalSystemMediaTransportControlsSession PickSession()
         {
             if (_manager == null) return null;
@@ -122,34 +148,37 @@ namespace DesktopDock.Services
             System.Collections.Generic.IReadOnlyList<GlobalSystemMediaTransportControlsSession> all = null;
             try { all = _manager.GetSessions(); } catch { }
 
-            if (all != null && all.Count > 0)
+            GlobalSystemMediaTransportControlsSession current = null;
+            try { current = _manager.GetCurrentSession(); } catch { }
+
+            if (all == null || all.Count == 0) return current;
+
+            // 1) 当前会话真的在放 → 就用它（这是"用户最近操作的那个播放器"）
+            if (current != null && IsLivePlaying(current)) return current;
+
+            // 2) 否则在所有"真的在放"的会话里挑最近更新过的
+            GlobalSystemMediaTransportControlsSession best = null;
+            DateTimeOffset bestTime = DateTimeOffset.MinValue;
+
+            foreach (var s in all)
             {
-                // 1) 正在播放的优先
-                foreach (var s in all)
-                {
-                    try
-                    {
-                        if (s.GetPlaybackInfo().PlaybackStatus ==
-                            GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing)
-                            return s;
-                    }
-                    catch { }
-                }
-
-                // 2) 没人在放，但当前会话有内容就用它（保持显示暂停状态）
-                try
-                {
-                    var cur = _manager.GetCurrentSession();
-                    if (cur != null) return cur;
-                }
-                catch { }
-
-                // 3) 兜底：最近一个
-                return all[all.Count - 1];
+                if (!IsLivePlaying(s)) continue;
+                var t = LastActive(s);
+                if (t > bestTime) { bestTime = t; best = s; }
             }
+            if (best != null) return best;
 
-            try { return _manager.GetCurrentSession(); }
-            catch { return null; }
+            // 3) 没人在放 → 保持当前会话（显示暂停/结束状态），否则取最近更新的
+            if (current != null) return current;
+
+            GlobalSystemMediaTransportControlsSession fallback = null;
+            DateTimeOffset fallbackTime = DateTimeOffset.MinValue;
+            foreach (var s in all)
+            {
+                var t = LastActive(s);
+                if (t > fallbackTime) { fallbackTime = t; fallback = s; }
+            }
+            return fallback ?? all[all.Count - 1];
         }
 
         private async Task LoadPropertiesAsync()
@@ -229,16 +258,7 @@ namespace DesktopDock.Services
             if (DateTimeOffset.Now - _lastRepick > TimeSpan.FromSeconds(2))
             {
                 _lastRepick = DateTimeOffset.Now;
-                bool currentPlaying = false;
-                if (session != null)
-                {
-                    try
-                    {
-                        currentPlaying = session.GetPlaybackInfo().PlaybackStatus ==
-                            GlobalSystemMediaTransportControlsSessionPlaybackStatus.Playing;
-                    }
-                    catch { currentPlaying = false; }
-                }
+                bool currentPlaying = session != null && IsLivePlaying(session);
 
                 if (!currentPlaying)
                 {
