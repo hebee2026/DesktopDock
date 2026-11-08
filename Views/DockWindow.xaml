@@ -1,0 +1,216 @@
+<Window x:Class="DesktopDock.Views.DockWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="桌面收纳盒"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
+        ShowActivated="False" WindowStartupLocation="Manual"
+        Left="-3000" Top="-3000" Width="420" Height="800"
+        SnapsToDevicePixels="True" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+
+    <!-- 整块面板用 RenderTransform 做滑入滑出：窗口本身不动，动画全部走 GPU 合成，
+         天然跟随显示器刷新率（144Hz 也不掉帧），不像逐帧 SetWindowPos 那样卡顿。 -->
+    <Border x:Name="Shell" CornerRadius="0,20,20,0" BorderBrush="#2BFFFFFF" BorderThickness="1,0,0,0"
+            RenderTransformOrigin="0,0.5">
+        <Border.RenderTransform>
+            <TranslateTransform x:Name="SlideX" X="-460" />
+        </Border.RenderTransform>
+
+        <Grid ClipToBounds="True">
+            <!-- 毛玻璃蒙层：底图由 Shell.Background（模糊截图）提供，这里是压暗与配色 -->
+            <Border x:Name="TintLayer" CornerRadius="0,19,19,0" IsHitTestVisible="False" />
+
+            <Grid x:Name="ContentRoot">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 左边缘高光 -->
+                <Border Width="2" HorizontalAlignment="Left" VerticalAlignment="Stretch" Grid.RowSpan="5"
+                        IsHitTestVisible="False" Margin="0,24,0,24" CornerRadius="1">
+                    <Border.Background>
+                        <LinearGradientBrush StartPoint="0,0" EndPoint="0,1">
+                            <GradientStop Color="#00E8C79B" Offset="0" />
+                            <GradientStop Color="#99E8C79B" Offset="0.5" />
+                            <GradientStop Color="#00E8C79B" Offset="1" />
+                        </LinearGradientBrush>
+                    </Border.Background>
+                </Border>
+
+                <!-- 时间 / 天气 -->
+                <Border x:Name="GlanceCard" Grid.Row="0" Margin="14,14,14,0" CornerRadius="16"
+                        Background="#12FFFFFF" BorderBrush="#18FFFFFF" BorderThickness="1" Padding="16,14,14,14">
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel x:Name="ClockStack" VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock x:Name="ClockText" Text="--:--" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                                <TextBlock x:Name="SecondsText" Text="" FontWeight="SemiBold" Foreground="#80FFFFFF"
+                                           VerticalAlignment="Bottom" Margin="1,0,0,4" />
+                                <TextBlock x:Name="PeriodText" Text="" Foreground="#80FFFFFF"
+                                           VerticalAlignment="Bottom" Margin="4,0,0,7" />
+                            </StackPanel>
+                            <TextBlock x:Name="DateText" Text="" Foreground="#99FFFFFF" Margin="0,5,0,0" />
+                            <TextBlock x:Name="CityText" Text="" Foreground="#5CFFFFFF" Margin="0,3,0,0" />
+                        </StackPanel>
+
+                        <StackPanel x:Name="WeatherBox" Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right">
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                <TextBlock x:Name="WeatherGlyph" Text="◌" FontFamily="Segoe UI Symbol"
+                                           VerticalAlignment="Center" Foreground="#FFD479" />
+                                <TextBlock x:Name="TempText" Text="--°" FontWeight="SemiBold" Foreground="#FFFFFFFF"
+                                           Margin="6,0,0,0" VerticalAlignment="Center" />
+                            </StackPanel>
+                            <TextBlock x:Name="CondText" Text="获取中…" HorizontalAlignment="Right" Foreground="#99FFFFFF" Margin="0,2,0,0" />
+                            <TextBlock x:Name="MetaText" Text="" HorizontalAlignment="Right" Foreground="#5CFFFFFF"
+                                       Margin="0,2,0,0" MaxWidth="160" TextAlignment="Right" TextWrapping="Wrap" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- 未来几天 -->
+                <Border x:Name="ForecastCard" Grid.Row="1" Margin="14,10,14,0" CornerRadius="14"
+                        Background="#0AFFFFFF" Padding="10,9" Visibility="Collapsed">
+                    <UniformGrid x:Name="ForecastStrip" Columns="5" />
+                </Border>
+
+                <!-- 搜索 -->
+                <Grid x:Name="SearchRow" Grid.Row="2" Margin="14,12,14,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Border Background="#10FFFFFF" CornerRadius="9" Height="32">
+                        <Grid>
+                            <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="12" Foreground="#66FFFFFF"
+                                       VerticalAlignment="Center" Margin="10,0,0,0" IsHitTestVisible="False" />
+                            <TextBox x:Name="SearchBox" Background="Transparent" BorderThickness="0"
+                                     Foreground="#E6FFFFFF" CaretBrush="#E6FFFFFF" SelectionBrush="#55FFFFFF"
+                                     FontSize="12" Padding="30,0,8,0" VerticalContentAlignment="Center"
+                                     TextChanged="SearchBox_TextChanged" />
+                            <TextBlock x:Name="SearchHint" Text="搜索快捷方式" FontSize="12" Foreground="#4DFFFFFF"
+                                       Margin="31,0,0,0" VerticalAlignment="Center" IsHitTestVisible="False" />
+                        </Grid>
+                    </Border>
+
+                    <Button x:Name="RefreshBtn" Grid.Column="1" Style="{StaticResource IconButton}"
+                            Content="&#xE72C;" ToolTip="重新扫描桌面" Margin="6,0,0,0" Click="RefreshBtn_Click" />
+                    <Button x:Name="OpenDesktopBtn" Grid.Column="2" Style="{StaticResource IconButton}"
+                            ToolTip="打开桌面文件夹" Click="OpenDesktopBtn_Click">
+                        <Path Width="15" Height="13" Stretch="Uniform" Fill="#B3FFFFFF"
+                              Data="M1.6,3.4 L6.4,3.4 L8.3,5.4 L14.4,5.4 A1.6,1.6 0 0 1 16,7 L16,12 A1.6,1.6 0 0 1 14.4,13.6 L3.2,13.6 A1.6,1.6 0 0 1 1.6,12 Z" />
+                    </Button>
+                    <Button x:Name="SettingsBtn" Grid.Column="3" Style="{StaticResource IconButton}"
+                            Content="&#xE713;" ToolTip="设置" Click="SettingsBtn_Click" />
+                </Grid>
+
+                <!-- 快捷方式 -->
+                <Grid x:Name="ShortcutArea" Grid.Row="3">
+                    <ScrollViewer x:Name="ShortcutScroll" VerticalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled" Margin="10,2,4,2"
+                                  SizeChanged="ShortcutScroll_SizeChanged">
+                        <WrapPanel x:Name="ShortcutPanel" Orientation="Horizontal" />
+                    </ScrollViewer>
+                    <TextBlock x:Name="EmptyHint" Text="" Visibility="Collapsed" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                               Foreground="#4DFFFFFF" FontSize="12" Margin="24,0" />
+                </Grid>
+
+                <!-- 底栏 -->
+                <Border x:Name="MainFooter" Grid.Row="4" Background="#08FFFFFF" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0"
+                        Padding="14,7" CornerRadius="0,0,20,0">
+                    <Grid>
+                        <TextBlock x:Name="StatusText" VerticalAlignment="Center" FontSize="11" Foreground="#59FFFFFF"
+                                   TextTrimming="CharacterEllipsis" />
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                            <Button x:Name="QuitBtn" Style="{StaticResource IconButton}" Width="26" Height="26"
+                                    Content="&#xE7E8;" ToolTip="退出程序" Click="QuitBtn_Click" />
+                            <Button x:Name="PinBtn" Style="{StaticResource IconButton}" Width="26" Height="26"
+                                    Content="&#xE718;" ToolTip="固定（不随鼠标离开收起）" Click="PinBtn_Click" Margin="2,0,0,0" />
+                        </StackPanel>
+                    </Grid>
+                </Border>
+                <!-- 内置文件夹浏览：不依赖系统外壳，任何环境下都能打开文件夹 -->
+                <Grid x:Name="FolderLayer" Grid.Row="2" Grid.RowSpan="3" Visibility="Collapsed" Background="Transparent">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="12,10,14,4">
+                        <Button x:Name="FolderBackBtn" Style="{StaticResource IconButton}" Content="&#xE72B;"
+                                HorizontalAlignment="Left" Width="26" Height="26" Click="FolderBack_Click" ToolTip="返回上一级" />
+                        <StackPanel Margin="34,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="FolderTitle" FontSize="13" FontWeight="SemiBold" Foreground="#FFFFFFFF"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock x:Name="FolderPathText" FontSize="10" Foreground="#59FFFFFF"
+                                       TextTrimming="CharacterEllipsis" />
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="1">
+                        <ScrollViewer x:Name="FolderScroll" VerticalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled" Margin="10,2,4,2"
+                                      SizeChanged="FolderScroll_SizeChanged">
+                            <WrapPanel x:Name="FolderPanel" Orientation="Horizontal" />
+                        </ScrollViewer>
+                        <TextBlock x:Name="FolderEmpty" Text="这个文件夹是空的" Visibility="Collapsed"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="#4DFFFFFF" FontSize="12" />
+                    </Grid>
+
+                    <Border Grid.Row="2" Background="#08FFFFFF" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0"
+                            Padding="14,7" CornerRadius="0,0,20,0">
+                        <Grid>
+                            <TextBlock x:Name="FolderStatus" VerticalAlignment="Center" FontSize="11" Foreground="#59FFFFFF" />
+                            <Button x:Name="FolderExplorerBtn" Style="{StaticResource GhostButton}" Height="24"
+                                    Content="用资源管理器打开" HorizontalAlignment="Right" Click="FolderExplorer_Click" />
+                        </Grid>
+                    </Border>
+                </Grid>
+            </Grid>
+
+            <!-- 设置层 -->
+            <Border x:Name="SettingsLayer" Background="#FF0C0E13" CornerRadius="0,20,20,0" Visibility="Collapsed">
+                <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <Grid Grid.Row="0" Margin="18,16,14,8">
+                    <TextBlock Text="设置" FontSize="17" FontWeight="SemiBold" Foreground="#FFFFFFFF" VerticalAlignment="Center" />
+                    <Button x:Name="CloseSettingsBtn" Style="{StaticResource IconButton}" Content="&#xE711;"
+                            HorizontalAlignment="Right" Click="CloseSettingsBtn_Click" ToolTip="关闭设置" />
+                </Grid>
+
+                <ScrollViewer x:Name="SettingsScroll" Grid.Row="1" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Disabled" Padding="18,0,14,10" />
+
+                <Border Grid.Row="2" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0" Padding="18,10" Background="#08FFFFFF">
+                    <Grid>
+                        <TextBlock x:Name="SettingsFootNote" Text="所有设置即时生效并自动保存" FontSize="10.5"
+                                   Foreground="#4DFFFFFF" VerticalAlignment="Center" />
+                        <Button x:Name="ResetSettingsBtn" Style="{StaticResource GhostButton}" Content="恢复默认"
+                                HorizontalAlignment="Right" Click="ResetSettingsBtn_Click" />
+                    </Grid>
+                </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</Window>

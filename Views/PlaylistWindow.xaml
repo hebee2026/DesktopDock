@@ -1,0 +1,86 @@
+<Window x:Class="DesktopDock.Views.PlaylistWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="桌面收纳盒 · 播放列表"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="True" ResizeMode="NoResize"
+        WindowStartupLocation="Manual" Width="380" Height="470" Left="-3000" Top="-3000"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+
+    <Window.Resources>
+        <Style x:Key="TrackItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="#F2FFFFFF" />
+            <Setter Property="Padding" Value="10,0" />
+            <Setter Property="Height" Value="30" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border Background="{TemplateBinding Background}" CornerRadius="8" Padding="{TemplateBinding Padding}">
+                            <ContentPresenter VerticalAlignment="Center" />
+                        </Border>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Background" Value="#1AFFFFFF" />
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                    <Setter Property="Background" Value="#1FE8C79B" />
+                    <Setter Property="Foreground" Value="#E8C79B" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+
+        <DataTemplate x:Key="TrackTemplate">
+            <TextBlock Text="{Binding}" FontSize="12.5" TextTrimming="CharacterEllipsis" />
+        </DataTemplate>
+    </Window.Resources>
+
+    <!-- 三层：模糊底图 → 压暗蒙层 → 内容 -->
+    <Grid x:Name="Root">
+        <Border x:Name="Glass" CornerRadius="16" />
+        <Border x:Name="Tint" CornerRadius="16" Background="#D80C0E13"
+                BorderBrush="#26FFFFFF" BorderThickness="1" />
+
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <Grid Grid.Row="0" Margin="18,14,12,10">
+                <StackPanel>
+                    <TextBlock Text="播放列表" FontSize="16" FontWeight="SemiBold" Foreground="#FFFFFFFF" />
+                    <TextBlock x:Name="FolderText" FontSize="10.5" Foreground="#70FFFFFF"
+                               Margin="0,4,0,0" TextTrimming="CharacterEllipsis" MaxWidth="290" />
+                </StackPanel>
+                <Button x:Name="CloseBtn" Style="{StaticResource IconButton}" Content="&#xE711;"
+                        HorizontalAlignment="Right" VerticalAlignment="Top" ToolTip="关闭" Click="CloseBtn_Click" />
+            </Grid>
+
+            <ListBox x:Name="TrackList" Grid.Row="1"
+                     Background="Transparent" BorderThickness="0"
+                     Padding="10,0,10,0"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                     ScrollViewer.VerticalScrollBarVisibility="Auto"
+                     VirtualizingStackPanel.IsVirtualizing="True"
+                     VirtualizingStackPanel.VirtualizationMode="Recycling"
+                     ItemContainerStyle="{StaticResource TrackItemStyle}"
+                     ItemTemplate="{StaticResource TrackTemplate}"
+                     PreviewMouseLeftButtonUp="TrackList_PreviewMouseLeftButtonUp" />
+
+            <Border Grid.Row="2" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0" Padding="14,9">
+                <Grid>
+                    <Button x:Name="RefreshBtn" Style="{StaticResource GhostButton}" Content="刷新列表"
+                            Height="26" Width="86" HorizontalAlignment="Left" Click="RefreshBtn_Click" />
+                    <Button x:Name="FolderBtn" Style="{StaticResource GhostButton}" Content="打开文件夹"
+                            Height="26" Width="86" HorizontalAlignment="Right" Click="FolderBtn_Click" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Grid>
+</Window>

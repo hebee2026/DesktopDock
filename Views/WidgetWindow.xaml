@@ -1,0 +1,24 @@
+<Window x:Class="DesktopDock.Views.WidgetWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="桌面收纳盒 · 时间"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="False" ResizeMode="NoResize"
+        ShowActivated="False" WindowStartupLocation="Manual" Left="-3000" Top="-3000"
+        SizeToContent="WidthAndHeight" IsHitTestVisible="False" Focusable="False"
+        SnapsToDevicePixels="True" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+
+    <!-- 没有任何底板：字直接落在壁纸上。字色由壁纸明暗自动决定（见代码里的 ApplyPalette） -->
+    <StackPanel x:Name="Stack" HorizontalAlignment="Right" Margin="0">
+        <StackPanel x:Name="TimeRow" Orientation="Horizontal" HorizontalAlignment="Right">
+            <TextBlock x:Name="TimeText" Text="--:--" FontWeight="SemiBold" />
+            <TextBlock x:Name="SecondsText" Text="" VerticalAlignment="Bottom" Margin="3,0,0,6" />
+            <TextBlock x:Name="PeriodText" Text="" VerticalAlignment="Bottom" Margin="6,0,0,9" />
+        </StackPanel>
+
+        <TextBlock x:Name="DateText" Text="" HorizontalAlignment="Right" Margin="0,2,0,0" />
+
+        <TextBlock x:Name="WeekdayText" Text="" HorizontalAlignment="Right" Margin="0,1,0,0" />
+    </StackPanel>
+</Window>

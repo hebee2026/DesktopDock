@@ -1,0 +1,145 @@
+<Window x:Class="DesktopDock.Views.InfoWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="桌面收纳盒 · 壁纸信息"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ShowInTaskbar="False" Topmost="False" ResizeMode="NoResize"
+        ShowActivated="False" WindowStartupLocation="Manual" Left="-3000" Top="-3000"
+        SizeToContent="WidthAndHeight" Focusable="False"
+        SnapsToDevicePixels="True" UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
+
+    <Window.Resources>
+        <!-- 播放控制按钮：不做背景色，靠透明度做 hover，任何壁纸上都成立 -->
+        <Style x:Key="HudButton" TargetType="Button">
+            <Setter Property="Width" Value="26" />
+            <Setter Property="Height" Value="26" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontFamily" Value="Segoe MDL2 Assets" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Focusable" Value="False" />
+            <Setter Property="Opacity" Value="0.62" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <!-- 必须有一点点不透明度（alpha ≥ 1）：分层窗口对全透明像素是穿透的，
+                             背景全透明的话点不到按钮，只有字形那几个像素能点中。 -->
+                        <Border x:Name="bd" Background="#0C000000" CornerRadius="7">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#1F000000" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="bd" Property="Background" Value="#33000000" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+            <Style.Triggers>
+                <Trigger Property="IsMouseOver" Value="True">
+                    <Setter Property="Opacity" Value="1" />
+                </Trigger>
+                <Trigger Property="IsPressed" Value="True">
+                    <Setter Property="Opacity" Value="0.75" />
+                </Trigger>
+            </Style.Triggers>
+        </Style>
+    </Window.Resources>
+
+    <StackPanel x:Name="Stack" HorizontalAlignment="Left">
+
+        <!-- CPU / RAM / GPU：细线 + 百分比 -->
+        <StackPanel x:Name="PerfBlock" Orientation="Vertical">
+            <StackPanel x:Name="CpuBlock" Orientation="Horizontal" Margin="0,0,0,7">
+                <TextBlock x:Name="CpuLabel" Text="CPU" VerticalAlignment="Center" />
+                <Border x:Name="CpuTrack" Width="96" Height="3" Margin="8,0,8,0" VerticalAlignment="Center" CornerRadius="1">
+                    <Border x:Name="CpuFill" HorizontalAlignment="Left" Width="0" CornerRadius="1" />
+                </Border>
+                <TextBlock x:Name="CpuValue" Text="--" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel x:Name="RamBlock" Orientation="Horizontal" Margin="0,0,0,7">
+                <TextBlock x:Name="RamLabel" Text="RAM" VerticalAlignment="Center" />
+                <Border x:Name="RamTrack" Width="96" Height="3" Margin="8,0,8,0" VerticalAlignment="Center" CornerRadius="1">
+                    <Border x:Name="RamFill" HorizontalAlignment="Left" Width="0" CornerRadius="1" />
+                </Border>
+                <TextBlock x:Name="RamValue" Text="--" VerticalAlignment="Center" />
+            </StackPanel>
+
+            <StackPanel x:Name="GpuBlock" Orientation="Horizontal">
+                <TextBlock x:Name="GpuLabel" Text="GPU" VerticalAlignment="Center" />
+                <Border x:Name="GpuTrack" Width="96" Height="3" Margin="8,0,8,0" VerticalAlignment="Center" CornerRadius="1">
+                    <Border x:Name="GpuFill" HorizontalAlignment="Left" Width="0" CornerRadius="1" />
+                </Border>
+                <TextBlock x:Name="GpuValue" Text="--" VerticalAlignment="Center" />
+            </StackPanel>
+        </StackPanel>
+
+        <!-- 正在播放 -->
+        <Grid x:Name="MusicBlock" Margin="0,18,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
+
+            <Border x:Name="CoverBox" Width="54" Height="54" CornerRadius="10" ClipToBounds="True">
+                <Grid>
+                    <TextBlock x:Name="CoverGlyph" Text="&#x266A;" HorizontalAlignment="Center"
+                               VerticalAlignment="Center" />
+                    <Image x:Name="CoverImage" Stretch="UniformToFill" />
+                </Grid>
+            </Border>
+
+            <StackPanel x:Name="MusicText" Grid.Column="1" Margin="12,0,0,0" VerticalAlignment="Center" Width="340">
+                <TextBlock x:Name="TitleText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                <TextBlock x:Name="ArtistText" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" />
+
+                <!-- 进度条：外面一层 14px 的淡底是"可点击/可拖动"的命中区
+                     （分层窗口对全透明像素穿透，所以必须有一点点 alpha） -->
+                <Border x:Name="ProgressHit" Height="14" CornerRadius="3" Background="#08000000"
+                        Margin="0,4,0,0" Cursor="Hand">
+                    <Border x:Name="ProgressTrack" Height="2" VerticalAlignment="Center"
+                            CornerRadius="1" HorizontalAlignment="Stretch">
+                        <Border x:Name="ProgressFill" HorizontalAlignment="Left" Width="0" CornerRadius="1" />
+                    </Border>
+                </Border>
+
+                <Grid Margin="0,4,0,0">
+                    <TextBlock x:Name="TimeText" FontSize="10" VerticalAlignment="Center" IsHitTestVisible="False" />
+
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center">
+                        <TextBlock x:Name="StateText" FontSize="10" Margin="0,0,8,0"
+                                   VerticalAlignment="Center" IsHitTestVisible="False" />
+                        <Button x:Name="PrevButton" Style="{StaticResource HudButton}"
+                                Content="&#xE100;" ToolTip="上一首" Click="PrevButton_Click" />
+                        <Button x:Name="PlayButton" Style="{StaticResource HudButton}"
+                                Content="&#xE768;" ToolTip="播放 / 暂停" Click="PlayButton_Click" Margin="2,0" />
+                        <Button x:Name="NextButton" Style="{StaticResource HudButton}"
+                                Content="&#xE101;" ToolTip="下一首" Click="NextButton_Click" />
+                        <Button x:Name="ListButton" Style="{StaticResource HudButton}"
+                                Content="&#xE8FD;" ToolTip="播放列表" Click="ListButton_Click" Margin="2,0,0,0" />
+                    </StackPanel>
+                </Grid>
+            </StackPanel>
+        </Grid>
+
+        <!-- 歌词：三行，当前句高亮 -->
+        <StackPanel x:Name="LyricBlock" Margin="0,14,0,0" Visibility="Collapsed">
+            <TextBlock x:Name="LyricPrev" FontSize="11" Opacity="0.45"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="LyricCur" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0"
+                       TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="LyricNext" FontSize="11" Opacity="0.45" Margin="0,4,0,0"
+                       TextTrimming="CharacterEllipsis" />
+        </StackPanel>
+
+        <!-- 节奏条：32 根，随播放律动 -->
+        <StackPanel x:Name="BeatBlock" Orientation="Horizontal" Height="26"
+                    Margin="0,12,0,0" Visibility="Collapsed" />
+    </StackPanel>
+</Window>
