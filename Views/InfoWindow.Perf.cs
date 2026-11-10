@@ -109,14 +109,14 @@ namespace DesktopDock.Views
         }
 
         /// <summary>配色跟随主/次文字</summary>
-        private void ApplyExtraPerfPalette(Brush main, Brush dim, Brush faint)
+        private void ApplyExtraPerfPalette(Brush main, Brush dim, Brush faint, Brush fill)
         {
             foreach (PerfRow r in _extraRows)
             {
-                r.Label.Foreground = dim;
-                r.Value.Foreground = main;
-                r.Track.Background = faint;
-                r.Fill.Background = dim;
+                r.Label.Foreground = dim;    // 标签 = 次文字（与 CPU/RAM/GPU 一致）
+                r.Value.Foreground = main;   // 数值 = 主文字
+                r.Track.Background = faint;  // 轨道底
+                r.Fill.Background = fill;    // 填充 = 强调色
             }
         }
 

@@ -202,6 +202,7 @@ namespace DesktopDock.Views
                 case nameof(AppSettings.HudBeatBars):
                     BuildBeatBars((int)Math.Round(_s.HudBeatBars));
                     ApplySettings();
+                    ApplyPalette();   // 新建的柱子要重新上色
                     break;
                 case nameof(AppSettings.HudBeatOffsetX):
                 case nameof(AppSettings.HudBeatOffsetY):
@@ -856,6 +857,8 @@ namespace DesktopDock.Views
 
             double t = _position.TotalSeconds;
             int n = _beatBars.Count;
+            // 柱高按容器高度等比缩放，否则改「节奏条高度」只加空白、柱子不变
+            double hScale = Math.Max(0.35, BeatBlock.Height / 26.0);
 
             // 先按真频谱算一遍
             var heights = new double[n];
@@ -870,13 +873,13 @@ namespace DesktopDock.Views
                 {
                     int band = Math.Min(AudioSpectrum.BandCount - 1, i * AudioSpectrum.BandCount / Math.Max(1, n));
                     float v = _spectrum.Bands[band];
-                    heights[i] = 3 + Math.Pow(v, 1.35) * 21;
+                    heights[i] = (3 + Math.Pow(v, 1.35) * 21) * hScale;
                 }
                 else
                 {
                     double phase = t * 3.1 + i * 0.42;
-                    heights[i] = 4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
-                                   * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5));
+                    heights[i] = (4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
+                                   * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5))) * hScale;
                 }
             }
 
@@ -891,8 +894,8 @@ namespace DesktopDock.Views
                     for (int i = 0; i < n; i++)
                     {
                         double phase = t * 3.1 + i * 0.42;
-                        heights[i] = 4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
-                                       * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5));
+                        heights[i] = (4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
+                                       * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5))) * hScale;
                     }
                 }
             }
@@ -1152,7 +1155,7 @@ namespace DesktopDock.Views
                 foreach (Border b in new[] { CpuFill, RamFill, GpuFill, ProgressFill })
                     b.Background = aB;
                 foreach (var bar in _beatBars) bar.Background = aB;
-                ApplyExtraPerfPalette(mB, aB, Solid(Color.FromArgb(0x33, cAcc.R, cAcc.G, cAcc.B)));
+                ApplyExtraPerfPalette(mB, sB, Solid(Color.FromArgb(0x33, cAcc.R, cAcc.G, cAcc.B)), aB);
                 Stack.Effect = null;
                 return;
             }
@@ -1170,6 +1173,8 @@ namespace DesktopDock.Views
                 : Color.FromArgb(0x3D, 255, 255, 255);
 
             Brush mainBrush = Solid(main);
+            // 强调色：所有性能条与节奏柱共用的填充色
+            Brush accentBrush = Solid(main);
             Brush dimBrush = Solid(dim);
             Brush faintBrush = Solid(faint);
 
@@ -1189,10 +1194,11 @@ namespace DesktopDock.Views
                 track.Background = faintBrush;
 
             foreach (Border fill in new[] { CpuFill, RamFill, GpuFill })
-                fill.Background = dimBrush;
+                fill.Background = accentBrush;
 
             ProgressFill.Background = mainBrush;
-            ApplyExtraPerfPalette(mainBrush, dimBrush, faintBrush);   // 与 CPU/RAM/GPU 同一套色
+            foreach (var bar in _beatBars) bar.Background = accentBrush;
+            ApplyExtraPerfPalette(mainBrush, dimBrush, faintBrush, accentBrush);
 
             Stack.Effect = light
                 ? new System.Windows.Media.Effects.DropShadowEffect
