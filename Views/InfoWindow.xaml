@@ -5,7 +5,7 @@
         WindowStyle="None" AllowsTransparency="True" Background="Transparent"
         ShowInTaskbar="False" Topmost="False" ResizeMode="NoResize"
         ShowActivated="False" WindowStartupLocation="Manual" Left="-3000" Top="-3000"
-        SizeToContent="WidthAndHeight" Focusable="False"
+        SizeToContent="Manual" Focusable="False"
         SnapsToDevicePixels="True" UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Ideal" TextOptions.TextRenderingMode="ClearType">
 
@@ -51,10 +51,18 @@
         </Style>
     </Window.Resources>
 
-    <StackPanel x:Name="Stack" HorizontalAlignment="Left">
+    <Grid x:Name="RootGrid">
+      <StackPanel x:Name="Stack" HorizontalAlignment="Left" VerticalAlignment="Bottom"
+                  Margin="52,0,0,52">
+        <StackPanel.RenderTransform>
+            <RotateTransform x:Name="HudTilt" Angle="0" />
+        </StackPanel.RenderTransform>
 
         <!-- CPU / RAM / GPU：细线 + 百分比 -->
         <StackPanel x:Name="PerfBlock" Orientation="Vertical">
+            <StackPanel.RenderTransform>
+                <TranslateTransform x:Name="PerfShift" />
+            </StackPanel.RenderTransform>
             <StackPanel x:Name="CpuBlock" Orientation="Horizontal" Margin="0,0,0,7">
                 <TextBlock x:Name="CpuLabel" Text="CPU" VerticalAlignment="Center" />
                 <Border x:Name="CpuTrack" Width="96" Height="3" Margin="8,0,8,0" VerticalAlignment="Center" CornerRadius="1">
@@ -82,6 +90,9 @@
 
         <!-- 正在播放 -->
         <Grid x:Name="MusicBlock" Margin="0,18,0,0">
+            <Grid.RenderTransform>
+                <TranslateTransform x:Name="MusicShift" />
+            </Grid.RenderTransform>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
@@ -130,16 +141,29 @@
 
         <!-- 歌词：三行，当前句高亮 -->
         <StackPanel x:Name="LyricBlock" Margin="0,14,0,0" Visibility="Collapsed">
+            <StackPanel.RenderTransform>
+                <TransformGroup>
+                    <TranslateTransform x:Name="LyricOffset" />
+                    <TranslateTransform x:Name="LyricShift" />
+                </TransformGroup>
+            </StackPanel.RenderTransform>
             <TextBlock x:Name="LyricPrev" FontSize="11" Opacity="0.45"
                        TextTrimming="CharacterEllipsis" />
             <TextBlock x:Name="LyricCur" FontSize="15" FontWeight="SemiBold" Margin="0,4,0,0"
                        TextTrimming="CharacterEllipsis" />
+            <TextBlock x:Name="LyricTrans" FontSize="11" Opacity="0.62" Margin="0,2,0,0"
+                       TextTrimming="CharacterEllipsis" Visibility="Collapsed" />
             <TextBlock x:Name="LyricNext" FontSize="11" Opacity="0.45" Margin="0,4,0,0"
                        TextTrimming="CharacterEllipsis" />
         </StackPanel>
 
         <!-- 节奏条：32 根，随播放律动 -->
         <StackPanel x:Name="BeatBlock" Orientation="Horizontal" Height="26"
-                    Margin="0,12,0,0" Visibility="Collapsed" />
-    </StackPanel>
+                    Margin="0,12,0,0" Visibility="Collapsed">
+            <StackPanel.RenderTransform>
+                <TranslateTransform x:Name="BeatShift" />
+            </StackPanel.RenderTransform>
+        </StackPanel>
+      </StackPanel>
+    </Grid>
 </Window>

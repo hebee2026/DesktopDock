@@ -255,6 +255,11 @@ namespace DesktopDock.Views
                     if (_s.WidgetEnabled) Place();
                     break;
 
+                case nameof(AppSettings.WidgetStyle):
+                    ApplyStyle();
+                    ApplyPalette();
+                    break;
+
                 case nameof(AppSettings.WidgetLod):
                 case nameof(AppSettings.WidgetFontSize):
                 case nameof(AppSettings.WidgetFontFamilyName):
@@ -430,6 +435,43 @@ namespace DesktopDock.Views
             }
             catch { }
             return Color.FromArgb(alpha, fallback.R, fallback.G, fallback.B);
+        }
+
+        /// <summary>时钟样式：0 横排 / 1 竖排 / 2 极简 / 3 大字</summary>
+        private void ApplyStyle()
+        {
+            if (TimeRow == null) return;
+
+            switch (_s.WidgetStyle)
+            {
+                case 1:   // 竖排
+                    TimeRow.Orientation = System.Windows.Controls.Orientation.Vertical;
+                    TimeRow.HorizontalAlignment = HorizontalAlignment.Right;
+                    DateText.Visibility = Visibility.Visible;
+                    WeekdayText.Visibility = Visibility.Visible;
+                    break;
+
+                case 2:   // 极简：只留时间
+                    TimeRow.Orientation = System.Windows.Controls.Orientation.Horizontal;
+                    TimeRow.HorizontalAlignment = HorizontalAlignment.Right;
+                    DateText.Visibility = Visibility.Collapsed;
+                    WeekdayText.Visibility = Visibility.Collapsed;
+                    break;
+
+                case 3:   // 大字
+                    TimeRow.Orientation = System.Windows.Controls.Orientation.Horizontal;
+                    TimeRow.HorizontalAlignment = HorizontalAlignment.Right;
+                    DateText.Visibility = Visibility.Visible;
+                    WeekdayText.Visibility = Visibility.Visible;
+                    break;
+
+                default:  // 横排
+                    TimeRow.Orientation = System.Windows.Controls.Orientation.Horizontal;
+                    TimeRow.HorizontalAlignment = HorizontalAlignment.Right;
+                    DateText.Visibility = Visibility.Visible;
+                    WeekdayText.Visibility = Visibility.Visible;
+                    break;
+            }
         }
 
         private void ApplyPalette()

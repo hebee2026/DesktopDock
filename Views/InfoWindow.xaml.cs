@@ -67,7 +67,8 @@ namespace DesktopDock.Views
             };
 
             // 歌词/节奏条要更细的刷新
-            BuildBeatBars();
+            BuildBeatBars((int)Math.Round(_s.HudBeatBars));
+            BuildExtraPerfRows();
             _beatTimer = new DispatcherTimer(DispatcherPriority.Render)
             {
                 Interval = TimeSpan.FromMilliseconds(90)
@@ -119,41 +120,30 @@ namespace DesktopDock.Views
         {
             if (_hwnd == IntPtr.Zero) return;
 
+            // 全屏铺满：内容可以在整块屏幕内自由挪动，不会被窗口边缘裁掉
             ScreenInfo mon = ScreenInfo.Primary;
             double sc = mon.Scale <= 0 ? 1.0 : mon.Scale;
+            double dipW = mon.WorkWidth / sc;
+            double dipH = mon.WorkHeight / sc;
 
-            double dipW = ActualWidth;
-            double dipH = ActualHeight;
-            if (dipW <= 0 || dipH <= 0) return;
+            if (Math.Abs(Width - dipW) > 0.5) Width = dipW;
+            if (Math.Abs(Height - dipH) > 0.5) Height = dipH;
 
-            int w = (int)Math.Ceiling(dipW * sc);
-            int h = (int)Math.Ceiling(dipH * sc);
-            int margin = (int)Math.Round(MarginLogical * sc);
-
-            int x = mon.WorkLeft + margin;
-            int y = mon.WorkTop + mon.WorkHeight - h - margin;
-
-            // 自定义位置偏移（dip → px）
-            x += (int)Math.Round(_s.HudOffsetX * sc);
-            y += (int)Math.Round(_s.HudOffsetY * sc);
-
-            if (y < mon.WorkTop) y = mon.WorkTop;
-
-            IntPtr progman = Native.FindWindow("Progman", null);
-
-            double leftDip = x / sc;
-            double topDip = y / sc;
+            double leftDip = mon.WorkLeft / sc;
+            double topDip = mon.WorkTop / sc;
             if (Math.Abs(Left - leftDip) > 0.5) Left = leftDip;
             if (Math.Abs(Top - topDip) > 0.5) Top = topDip;
 
+            IntPtr progman = Native.FindWindow("Progman", null);
             Native.SetWindowPos(_hwnd, progman == IntPtr.Zero ? Native.HWND_BOTTOM : progman,
-                x, y, 0, 0, Native.SWP_NOSIZE | Native.SWP_NOACTIVATE);
+                mon.WorkLeft, mon.WorkTop, mon.WorkWidth, mon.WorkHeight,
+                Native.SWP_NOACTIVATE);
 
             if (!_placedLogged)
             {
                 _placedLogged = true;
-                SettingsStore.Log(string.Format("壁纸信息定位: {0}x{1} dip → {2},{3} px (scale {4:0.##})",
-                    dipW, dipH, x, y, sc));
+                SettingsStore.Log(string.Format("壁纸信息全屏覆盖: {0}x{1} dip @ {2},{3} px",
+                    dipW, dipH, mon.WorkLeft, mon.WorkTop));
             }
         }
 
@@ -183,6 +173,15 @@ namespace DesktopDock.Views
                     if (_s.InfoHudEnabled) Place();
                     break;
 
+
+                case nameof(AppSettings.HudShowCpu):
+                case nameof(AppSettings.HudShowRam):
+                case nameof(AppSettings.HudShowGpu):
+                case nameof(AppSettings.HudShowDisk):
+                case nameof(AppSettings.HudShowGpu0):
+                case nameof(AppSettings.HudShowGpu1):
+                case nameof(AppSettings.HudShowLyrics):
+                case nameof(AppSettings.HudShowBeat):
                 case nameof(AppSettings.InfoHudShowMusic):
                 case nameof(AppSettings.InfoHudShowPerf):
                 case nameof(AppSettings.InfoHudFontSize):
@@ -190,7 +189,41 @@ namespace DesktopDock.Views
                 case nameof(AppSettings.HudFontFamilyName):
                 case nameof(AppSettings.HudPerfFontSize):
                 case nameof(AppSettings.HudLyricFontSize):
+                case nameof(AppSettings.HudLyricWidth):
+                case nameof(AppSettings.HudPlayerWidth):
+                case nameof(AppSettings.HudTitleFontSize):
+                case nameof(AppSettings.HudArtistFontSize):
+                case nameof(AppSettings.HudTimeFontSize):
+                case nameof(AppSettings.HudBeatBarWidth):
+                case nameof(AppSettings.HudTilt):
+                case nameof(AppSettings.HudBeatHeight):
+                    ApplySettings();
+                    break;
+                case nameof(AppSettings.HudBeatBars):
+                    BuildBeatBars((int)Math.Round(_s.HudBeatBars));
+                    ApplySettings();
+                    break;
+                case nameof(AppSettings.HudBeatOffsetX):
+                case nameof(AppSettings.HudBeatOffsetY):
+                case nameof(AppSettings.HudTiltPerf):
+                case nameof(AppSettings.HudTiltMusic):
+                case nameof(AppSettings.HudTiltLyric):
+                case nameof(AppSettings.HudTiltBeat):
+                case nameof(AppSettings.HudPerfOffsetX):
+                case nameof(AppSettings.HudPerfOffsetY):
+                case nameof(AppSettings.HudMusicOffsetX):
+                case nameof(AppSettings.HudMusicOffsetY):
+                case nameof(AppSettings.HudLyricOffsetX):
+                case nameof(AppSettings.HudLyricOffsetY):
                 case nameof(AppSettings.HudPerfBarWidth):
+                    // 尺寸类：必须重新布局，否则只改了文字没改字号
+                    ApplySettings();
+                    break;
+
+                case nameof(AppSettings.HudShowTranslation):
+                    _lyricIndex = -2;
+                    UpdateLyrics(_position);
+                    break;
                 case nameof(AppSettings.HudShowCover):
                     ApplySettings();
                     break;
@@ -221,6 +254,11 @@ namespace DesktopDock.Views
         private void ApplySettings()
         {
             TextElement.SetFontFamily(Stack, ResolveFont());
+
+            // 给偏移留出空间：内容周围加 260dip 的余量，
+            // 否则把组件往左上挪一点就会被窗口边缘裁掉
+            // 窗口已全屏，内容只留基础边距；位移交给 Transform
+            Stack.Margin = new Thickness(52, 0, 0, 52);
 
             double s = Math.Max(0.6, Math.Min(2.2, _s.InfoHudScale));
             double size = _s.InfoHudFontSize * s;
@@ -256,11 +294,10 @@ namespace DesktopDock.Views
             RamBlock.Margin = blockGap;
 
             // 自定义字体 / 字号
+            // 空 = 微软雅黑。不能回退到「界面字体」——那是手写体，字形大一圈，HUD 会突然变大
             var fam = string.IsNullOrWhiteSpace(_s.HudFontFamilyName)
-                ? (TryFindResource("AppFont") as System.Windows.Media.FontFamily)
+                ? new System.Windows.Media.FontFamily("Microsoft YaHei UI")
                 : new System.Windows.Media.FontFamily(_s.HudFontFamilyName);
-            if (fam == null) fam = new System.Windows.Media.FontFamily(_s.FontFamilyName ?? "Microsoft YaHei UI");
-            if (!string.IsNullOrWhiteSpace(_s.HudFontFamilyName))
             {
                 foreach (var el in new FrameworkElement[] { TitleText, ArtistText, TimeText, StateText,
                              CpuLabel, RamLabel, GpuLabel, CpuValue, RamValue, GpuValue,
@@ -269,12 +306,53 @@ namespace DesktopDock.Views
             }
             LyricCur.FontSize = _s.HudLyricFontSize * s;
             // 预留歌词区高度：有歌词/没歌词窗口高度一致，组件不会跳动
+            // 每个组件：位移 + 独立旋转（旋转是刚体变换，组件不会被拉变形）
+            Func<double, double, double, TransformGroup> build = (ox, oy, tiltDeg) =>
+            {
+                var g = new TransformGroup();
+                g.Children.Add(new TranslateTransform(ox * s, oy * s));
+                g.Children.Add(new RotateTransform(Math.Max(-30, Math.Min(30, tiltDeg))));
+                return g;
+            };
+
+            PerfBlock.RenderTransform = build(_s.HudPerfOffsetX, _s.HudPerfOffsetY, _s.HudTiltPerf);
+            PerfBlock.RenderTransformOrigin = new Point(0, 1);
+            CounterRotateText(PerfBlock, _s.HudTilt + _s.HudTiltPerf);
+
+            // 播放器不受整体倾角影响：反向旋转把它抵消掉，只保留位置偏移
+            var musicGroup = new TransformGroup();
+            musicGroup.Children.Add(new TranslateTransform(_s.HudMusicOffsetX * s, _s.HudMusicOffsetY * s));
+            musicGroup.Children.Add(new RotateTransform(-_s.HudTilt));
+            MusicBlock.RenderTransform = musicGroup;
+            MusicBlock.RenderTransformOrigin = new Point(0, 1);
+            CounterRotateText(MusicBlock, 0);   // 块已抵消整体倾角，文字无需再转
+
+            var lyricGroup = build(_s.HudLyricOffsetX, _s.HudLyricOffsetY, _s.HudTiltLyric);
+            lyricGroup.Children.Add(LyricShift);   // 保留换句滑动动画
+            LyricBlock.RenderTransform = lyricGroup;
+            LyricBlock.RenderTransformOrigin = new Point(0, 1);
+            CounterRotateText(LyricBlock, _s.HudTilt + _s.HudTiltLyric);
+
+            BeatBlock.RenderTransform = build(_s.HudBeatOffsetX, _s.HudBeatOffsetY, _s.HudTiltBeat);
+            BeatBlock.RenderTransformOrigin = new Point(0, 1);
+
+            // 整体位移 + 旋转
+            var groupAll = new TransformGroup();
+            groupAll.Children.Add(new TranslateTransform(_s.HudOffsetX * s, _s.HudOffsetY * s));
+            groupAll.Children.Add(new RotateTransform(Math.Max(-30, Math.Min(30, _s.HudTilt))));
+            Stack.RenderTransform = groupAll;
+            Stack.RenderTransformOrigin = new Point(0, 1);
+
             LyricBlock.MinHeight = (_s.HudLyricFontSize * 1.5) * 1.0
                                    + (_s.HudLyricFontSize * 0.72 * 1.5) * 2 + 8 * s;
             LyricPrev.FontSize = Math.Max(8, _s.HudLyricFontSize * 0.72) * s;
             LyricNext.FontSize = LyricPrev.FontSize;
             CpuLabel.FontSize = RamLabel.FontSize = GpuLabel.FontSize = _s.HudPerfFontSize * s;
             CpuValue.FontSize = RamValue.FontSize = GpuValue.FontSize = _s.HudPerfFontSize * s;
+            TitleText.FontSize = _s.HudTitleFontSize * s;
+            ArtistText.FontSize = _s.HudArtistFontSize * s;
+            TimeText.FontSize = _s.HudTimeFontSize * s;
+            StateText.FontSize = _s.HudTimeFontSize * s;
 
             // 性能条长度单独可调
             double barW = Math.Max(30, _s.HudPerfBarWidth) * s;
@@ -282,7 +360,29 @@ namespace DesktopDock.Views
 
             MusicBlock.Margin = new Thickness(0, 18 * s, 0, 0);
             MusicText.Margin = new Thickness(12 * s, 0, 0, 0);
-            MusicText.Width = 340 * s;
+            MusicText.Width = _s.HudPlayerWidth * s;
+            ProgressHit.Width = _s.HudPlayerWidth * s;
+            LyricBlock.Width = _s.HudLyricWidth > 0 ? _s.HudLyricWidth * s : double.NaN;
+            foreach (var _b in _beatBars) { _b.Width = _s.HudBeatBarWidth; }
+            BeatBlock.Height = Math.Max(8, _s.HudBeatHeight * s);
+            ApplyExtraPerfFont(s);
+            ApplyExtraPerfLayout(s);
+            // 三行老的性能条：行距/条高/字号与新增行完全一致
+            var rowGap = new Thickness(0, 0, 0, 8);
+            CpuBlock.Margin = rowGap;
+            RamBlock.Margin = rowGap;
+            GpuBlock.Margin = rowGap;
+            CpuTrack.Height = RamTrack.Height = GpuTrack.Height = Math.Max(2, 3 * s);
+
+            CpuBlock.Visibility = _s.HudShowCpu ? Visibility.Visible : Visibility.Collapsed;
+            RamBlock.Visibility = _s.HudShowRam ? Visibility.Visible : Visibility.Collapsed;
+            GpuBlock.Visibility = _s.HudShowGpu ? Visibility.Visible : Visibility.Collapsed;
+
+            // 各小组件独立开关
+            LyricBlock.Visibility = _s.HudShowLyrics ? Visibility.Visible : Visibility.Collapsed;
+            BeatBlock.Visibility = _s.HudShowBeat ? Visibility.Visible : Visibility.Collapsed;
+            PerfBlock.Visibility = _s.InfoHudShowPerf ? Visibility.Visible : Visibility.Collapsed;
+            MusicBlock.Visibility = _s.InfoHudShowMusic ? Visibility.Visible : Visibility.Collapsed;
 
             ProgressHit.Margin = new Thickness(0, 6 * s, 0, 0);
             ProgressHit.Height = Math.Max(8, 14 * s);
@@ -323,6 +423,7 @@ namespace DesktopDock.Views
             SetBar(CpuValue, CpuFill, CpuTrack, SystemMonitor.CpuPercent);
             SetBar(RamValue, RamFill, RamTrack, SystemMonitor.RamPercent);
             SetBar(GpuValue, GpuFill, GpuTrack, SystemMonitor.GpuPercent);
+            UpdateExtraPerf();
         }
 
         private static void SetBar(TextBlock value, Border fill, Border track, double percent)
@@ -373,8 +474,12 @@ namespace DesktopDock.Views
             }
 
             string artist = string.IsNullOrWhiteSpace(now.Artist) ? now.Album : now.Artist;
+
+            // 封面必须和当前曲目对得上，否则宁可不显示（防止上一首的图残留）
+            string trackKey = (now.Title ?? "") + "|" + (now.Artist ?? "") + "|" + (now.Album ?? "");
+            var coverSafe = string.Equals(now.CoverKey, trackKey, StringComparison.Ordinal) ? now.Cover : null;
             LoadLyricsForTrack(now.Title, artist);
-            ShowTrack(now.Title, artist, now.IsPlaying, now.Position, now.Duration, now.Cover,
+            ShowTrack(now.Title, artist, now.IsPlaying, now.Position, now.Duration, coverSafe,
                 now.IsPlaying ? "正在播放" : "已暂停");
         }
 
@@ -390,9 +495,21 @@ namespace DesktopDock.Views
             ArtistText.Text = artist ?? "";
             ArtistText.Visibility = string.IsNullOrWhiteSpace(artist) ? Visibility.Collapsed : Visibility.Visible;
 
-            CoverImage.Source = cover;
-            CoverGlyph.Visibility = cover == null ? Visibility.Visible : Visibility.Collapsed;
-            CoverBox.Visibility = _s.HudShowCover ? Visibility.Visible : Visibility.Collapsed;
+            // 关闭封面时留一个音符占位，不要整块消失
+            if (!_s.HudShowCover)
+            {
+                CoverBox.Visibility = Visibility.Visible;
+                CoverImage.Source = null;
+                CoverImage.Visibility = Visibility.Collapsed;
+                CoverGlyph.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                CoverBox.Visibility = Visibility.Visible;
+                CoverImage.Visibility = Visibility.Visible;
+                CoverImage.Source = cover;
+                CoverGlyph.Visibility = cover == null ? Visibility.Visible : Visibility.Collapsed;
+            }
 
             double ratio = duration.TotalSeconds > 0
                 ? Math.Max(0, Math.Min(1, position.TotalSeconds / duration.TotalSeconds))
@@ -444,11 +561,18 @@ namespace DesktopDock.Views
         private bool _playing;
         private TimeSpan _position;
         private int _lyricIndex = -1;
+        private readonly System.Collections.Generic.List<(double t, string text)> _trans =
+            new System.Collections.Generic.List<(double, string)>();
+        private string _lyricTitle = "";
 
-        private void BuildBeatBars()
+        private void BuildBeatBars(int count = 32)
         {
+            // 重建前必须清空：否则每拖一次滑杆就多堆一整套柱子（"调不回去"就是这个原因）
+            BeatBlock.Children.Clear();
+            _beatBars.Clear();
+
             var accent = System.Windows.Media.Color.FromRgb(0x9C, 0xF4, 0xFF);
-            for (int i = 0; i < 32; i++)
+            for (int i = 0; i < count; i++)
             {
                 var b = new Border
                 {
@@ -497,48 +621,116 @@ namespace DesktopDock.Views
             LyricBlock.Visibility = Visibility.Collapsed;
 
             if (string.IsNullOrWhiteSpace(title)) return;
+            _lyricTitle = title;
 
             try
             {
-                // 没设置就默认用「我的音乐\Lyrics」
-                string dir = _s.LyricsFolder;
-                if (string.IsNullOrWhiteSpace(dir))
-                    dir = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "Lyrics");
-                if (!System.IO.Directory.Exists(dir)) return;
-
-                // 常见命名：歌名.lrc / 歌名 - 歌手.lrc / 歌手 - 歌名.lrc
-                string[] names =
+                // 索引：歌名（小写）→ lrc 路径，覆盖「歌词文件夹」+ 整个「音乐」文件夹
+                string hit = FindLrc(GetLyricIndex(false), title, artist);
+                if (hit == null)
                 {
-                    title + ".lrc",
-                    title + " - " + artist + ".lrc",
-                    artist + " - " + title + ".lrc",
-                };
-
-                foreach (string n in names)
-                {
-                    string p = System.IO.Path.Combine(dir, n);
-                    if (System.IO.File.Exists(p)) { ParseLrc(p); return; }
+                    // 可能是刚下载的新歌，缓存里还没有 → 强制重建后重试一次
+                    hit = FindLrc(GetLyricIndex(true), title, artist);
                 }
-
-                // 再按「文件名包含歌名」模糊匹配一次
-                foreach (string f in System.IO.Directory.GetFiles(dir, "*.lrc"))
-                {
-                    string baseName = System.IO.Path.GetFileNameWithoutExtension(f);
-                    if (baseName.IndexOf(title, StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        ParseLrc(f);
-                        return;
-                    }
-                }
+                if (hit != null) ParseLrc(hit);
             }
             catch { }
+        }
+
+        /// <summary>在索引里找这首歌的 lrc；找不到返回 null</summary>
+        private static string FindLrc(System.Collections.Generic.Dictionary<string, string> index,
+                                      string title, string artist)
+        {
+            if (index == null || index.Count == 0) return null;
+
+            string t = (title ?? "").Trim().ToLowerInvariant();
+            string a = (artist ?? "").Trim().ToLowerInvariant();
+            if (t.Length == 0) return null;
+
+            string[] keys =
+            {
+                t,
+                t + " - " + a,
+                a + " - " + t,
+                t + "-" + a,
+                a + "-" + t,
+            };
+            foreach (string k in keys)
+                if (index.TryGetValue(k, out string hit)) return hit;
+
+            // 文件名里包含歌名（取最短的，通常最精确）
+            string best = null;
+            foreach (var kv in index)
+            {
+                if (kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (best == null || kv.Key.Length < best.Length) best = kv.Key;
+            }
+            return best != null && index.TryGetValue(best, out string h2) ? h2 : null;
+        }
+
+        private readonly System.Collections.Generic.Dictionary<string, string> _lrcIndex =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        private DateTime _lyricIndexAt = DateTime.MinValue;
+        private string _lyricIndexKey = "";
+
+        /// <summary>
+        /// 扫描歌词：配置的歌词文件夹 + 系统「音乐」文件夹（递归）。
+        /// 多数人的 .lrc 是和音频放一起的，所以不能只认一个固定目录。
+        /// 索引缓存 10 分钟，避免每次换歌都扫盘。
+        /// </summary>
+        private System.Collections.Generic.Dictionary<string, string> GetLyricIndex(bool force = false)
+        {
+            string key = _s.LyricsFolder ?? "";
+            if (_lrcIndex.Count > 0
+                && key == _lyricIndexKey
+                && (DateTime.Now - _lyricIndexAt) < TimeSpan.FromMinutes(10))
+                return _lrcIndex;
+
+            _lrcIndex.Clear();
+            _lyricIndexKey = key;
+            _lyricIndexAt = DateTime.Now;
+
+            var roots = new System.Collections.Generic.List<string>();
+            if (!string.IsNullOrWhiteSpace(key) && System.IO.Directory.Exists(key)) roots.Add(key);
+
+            string music = Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+            if (System.IO.Directory.Exists(music)) roots.Add(music);
+
+            foreach (string root in roots)
+            {
+                try
+                {
+                    foreach (string file in System.IO.Directory.EnumerateFiles(
+                                 root, "*.lrc", System.IO.SearchOption.AllDirectories))
+                    {
+                        // 网页下载常把空格编码成 '+'，统一还原成空格，否则拆不出「歌手 - 歌名」
+                        string name = System.IO.Path.GetFileNameWithoutExtension(file)
+                                          .Replace('+', ' ').Trim().ToLowerInvariant();
+                        if (name.Length == 0) continue;
+                        if (!_lrcIndex.ContainsKey(name)) _lrcIndex[name] = file;
+
+                        // 同时登记去掉歌手前缀/后缀的版本，方便只按歌名命中
+                        int sep = name.IndexOf(" - ", StringComparison.Ordinal);
+                        if (sep > 0)
+                        {
+                            string after = name.Substring(sep + 3).Trim();
+                            string before = name.Substring(0, sep).Trim();
+                            if (after.Length > 0 && !_lrcIndex.ContainsKey(after)) _lrcIndex[after] = file;
+                            if (before.Length > 0 && !_lrcIndex.ContainsKey(before)) _lrcIndex[before] = file;
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            return _lrcIndex;
         }
 
         private void ParseLrc(string path)
         {
             try
             {
+                var all = new System.Collections.Generic.List<(double t, string text)>();
                 foreach (string raw in System.IO.File.ReadAllLines(path, System.Text.Encoding.UTF8))
                 {
                     var m = System.Text.RegularExpressions.Regex.Match(raw, @"^\[(\d+):(\d+(?:\.\d+)?)\](.*)$");
@@ -546,9 +738,28 @@ namespace DesktopDock.Views
                     double t = int.Parse(m.Groups[1].Value) * 60 + double.Parse(m.Groups[2].Value,
                         System.Globalization.CultureInfo.InvariantCulture);
                     string text = m.Groups[3].Value.Trim();
-                    if (text.Length > 0) _lyrics.Add((t, text));
+                    if (text.Length > 0) all.Add((t, text));
                 }
-                _lyrics.Sort((a, b) => a.t.CompareTo(b.t));
+                all.Sort((a, b) => a.t.CompareTo(b.t));
+
+                // 双语歌词：按字符集分成「原文」和「译文」两路
+                var cjk = new System.Collections.Generic.List<(double t, string text)>();
+                var latin = new System.Collections.Generic.List<(double t, string text)>();
+                foreach (var line in all)
+                    (HasCjk(line.text) ? cjk : latin).Add(line);
+
+                _trans.Clear();
+                if (cjk.Count > 0 && latin.Count > 0)
+                {
+                    // 歌名是中文 → 原文用中文；否则原文用外文
+                    bool titleCjk = HasCjk(_lyricTitle);
+                    foreach (var l in (titleCjk ? cjk : latin)) _lyrics.Add(l);
+                    foreach (var l in (titleCjk ? latin : cjk)) _trans.Add(l);
+                }
+                else
+                {
+                    _lyrics.AddRange(all);
+                }
                 RefreshLyricsVisibility();
             }
             catch { }
@@ -570,6 +781,15 @@ namespace DesktopDock.Views
             LyricBlock.Visibility = _lyrics.Count > 0 ? Visibility.Visible : Visibility.Hidden;
         }
 
+        /// <summary>是否含中日韩汉字</summary>
+        private static bool HasCjk(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return false;
+            foreach (char c in s)
+                if (c >= 0x4E00 && c <= 0x9FFF) return true;
+            return false;
+        }
+
         private void UpdateLyrics(TimeSpan position)
         {
             if (_lyrics.Count == 0) return;
@@ -586,9 +806,43 @@ namespace DesktopDock.Views
             LyricCur.Text = idx >= 0 && idx < _lyrics.Count ? _lyrics[idx].text : "";
             LyricNext.Text = idx + 1 < _lyrics.Count ? _lyrics[idx + 1].text : "";
 
-            // 换句时淡入一下
-            var anim = new System.Windows.Media.Animation.DoubleAnimation(0.25, 1.0, TimeSpan.FromMilliseconds(260));
-            LyricCur.BeginAnimation(UIElement.OpacityProperty, anim);
+            // 译文：按时间找最近的一句（±3 秒内）
+            string trans = "";
+            if (_s.HudShowTranslation && idx >= 0 && _trans.Count > 0)
+            {
+                double cur = _lyrics[idx].t;
+                double bestGap = 3.0;
+                foreach (var tr in _trans)
+                {
+                    double gap = Math.Abs(tr.t - cur);
+                    if (gap < bestGap) { bestGap = gap; trans = tr.text; }
+                }
+            }
+            LyricTrans.Text = trans;
+            LyricTrans.Visibility = string.IsNullOrEmpty(trans) ? Visibility.Collapsed : Visibility.Visible;
+
+            // 换句：整块从下往上滑入，而不是硬切
+            try
+            {
+                double rowH = Math.Max(18, LyricCur.FontSize * 1.55);
+                if (LyricShift != null)
+                {
+                    LyricShift.BeginAnimation(
+                        System.Windows.Media.TranslateTransform.YProperty,
+                        new System.Windows.Media.Animation.DoubleAnimation(
+                            rowH, 0, TimeSpan.FromMilliseconds(240))
+                        {
+                            EasingFunction = new System.Windows.Media.Animation.CubicEase
+                            {
+                                EasingMode = System.Windows.Media.Animation.EasingMode.EaseOut
+                            }
+                        });
+                }
+                LyricCur.BeginAnimation(UIElement.OpacityProperty,
+                    new System.Windows.Media.Animation.DoubleAnimation(
+                        0.35, 1.0, TimeSpan.FromMilliseconds(240)));
+            }
+            catch { }
         }
 
         /// <summary>节奏条：按播放位置推一个律动（不是 FFT，只求跟得上拍子）</summary>
@@ -599,27 +853,56 @@ namespace DesktopDock.Views
             if (!show) return;
 
             _spectrum.Update();
-            double t = _position.TotalSeconds;
-            bool live = _spectrum.HasSignal;
 
-            for (int i = 0; i < _beatBars.Count; i++)
+            double t = _position.TotalSeconds;
+            int n = _beatBars.Count;
+
+            // 先按真频谱算一遍
+            var heights = new double[n];
+            float peak = 0f;
+            for (int k = 0; k < AudioSpectrum.BandCount; k++)
+                if (_spectrum.Bands[k] > peak) peak = _spectrum.Bands[k];
+
+            bool live = _spectrum.HasSignal && peak > 0.05f;
+            for (int i = 0; i < n; i++)
             {
-                double h;
                 if (live)
                 {
-                    // 真频谱：32 段直接对应 32 根柱
-                    float v = _spectrum.Bands[Math.Min(AudioSpectrum.BandCount - 1, i)];
-                    h = 3 + Math.Pow(v, 1.35) * 21;
+                    int band = Math.Min(AudioSpectrum.BandCount - 1, i * AudioSpectrum.BandCount / Math.Max(1, n));
+                    float v = _spectrum.Bands[band];
+                    heights[i] = 3 + Math.Pow(v, 1.35) * 21;
                 }
                 else
                 {
                     double phase = t * 3.1 + i * 0.42;
-                    h = 4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
-                             * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5));
+                    heights[i] = 4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
+                                   * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5));
                 }
+            }
+
+            // 兜底：真频谱如果整排几乎一样高（静音/抓不到 loopback），改用律动，别让柱子"死"在那
+            if (live)
+            {
+                double mx = heights[0], mn = heights[0];
+                for (int i = 1; i < n; i++) { if (heights[i] > mx) mx = heights[i]; if (heights[i] < mn) mn = heights[i]; }
+                if (mx - mn < 2.5)
+                {
+                    live = false;
+                    for (int i = 0; i < n; i++)
+                    {
+                        double phase = t * 3.1 + i * 0.42;
+                        heights[i] = 4 + (Math.Sin(phase) * 0.5 + 0.5) * 18
+                                       * (0.55 + 0.45 * (Math.Sin(t * 1.3 + i * 0.11) * 0.5 + 0.5));
+                    }
+                }
+            }
+
+            for (int i = 0; i < n; i++)
+            {
                 _beatBars[i].BeginAnimation(FrameworkElement.HeightProperty,
-                    new System.Windows.Media.Animation.DoubleAnimation(h, TimeSpan.FromMilliseconds(live ? 55 : 90)));
-                _beatBars[i].Opacity = live ? 0.55 + _spectrum.Bands[i] * 0.45 : 0.55;
+                    new System.Windows.Media.Animation.DoubleAnimation(
+                        heights[i], TimeSpan.FromMilliseconds(live ? 55 : 90)));
+                _beatBars[i].Opacity = live ? 0.55 + _spectrum.Bands[Math.Min(31, i * 32 / Math.Max(1, n))] * 0.45 : 0.55;
             }
         }
 
@@ -821,6 +1104,31 @@ namespace DesktopDock.Views
             return Color.FromArgb(alpha, fallback.R, fallback.G, fallback.B);
         }
 
+        /// <summary>
+        /// 块被旋转后，把里面的文字反向旋转同样角度：位置跟着斜，字形保持正立。
+        /// </summary>
+        private static void CounterRotateText(DependencyObject root, double degrees)
+        {
+            foreach (TextBlock tb in FindTextBlocks(root))
+            {
+                if (Math.Abs(degrees) < 0.01) { tb.RenderTransform = null; continue; }
+                tb.RenderTransformOrigin = new Point(0.5, 0.5);
+                tb.RenderTransform = new RotateTransform(-degrees);
+            }
+        }
+
+        private static System.Collections.Generic.IEnumerable<TextBlock> FindTextBlocks(DependencyObject root)
+        {
+            if (root == null) yield break;
+            int n = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < n; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb) yield return tb;
+                foreach (var sub in FindTextBlocks(child)) yield return sub;
+            }
+        }
+
         private void ApplyPalette()
         {
             bool light = _lightBackground;
@@ -835,7 +1143,7 @@ namespace DesktopDock.Views
                 var mB = Solid(cMain); var sB = Solid(cSub); var aB = Solid(cAcc);
                 foreach (TextBlock b in new[] { TitleText, CpuValue, RamValue, GpuValue, LyricCur })
                     b.Foreground = mB;
-                foreach (TextBlock b in new[] { CpuLabel, RamLabel, GpuLabel, TimeText, StateText, ArtistText, LyricPrev, LyricNext })
+                foreach (TextBlock b in new[] { CpuLabel, RamLabel, GpuLabel, TimeText, StateText, ArtistText, LyricPrev, LyricNext, LyricTrans })
                     b.Foreground = sB;
                 foreach (Button b in new[] { PrevButton, PlayButton, NextButton })
                     b.Foreground = mB;
@@ -844,6 +1152,7 @@ namespace DesktopDock.Views
                 foreach (Border b in new[] { CpuFill, RamFill, GpuFill, ProgressFill })
                     b.Background = aB;
                 foreach (var bar in _beatBars) bar.Background = aB;
+                ApplyExtraPerfPalette(mB, aB, Solid(Color.FromArgb(0x33, cAcc.R, cAcc.G, cAcc.B)));
                 Stack.Effect = null;
                 return;
             }
@@ -883,6 +1192,7 @@ namespace DesktopDock.Views
                 fill.Background = dimBrush;
 
             ProgressFill.Background = mainBrush;
+            ApplyExtraPerfPalette(mainBrush, dimBrush, faintBrush);   // 与 CPU/RAM/GPU 同一套色
 
             Stack.Effect = light
                 ? new System.Windows.Media.Effects.DropShadowEffect

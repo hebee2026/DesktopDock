@@ -19,6 +19,7 @@ namespace DesktopDock.Services
         public TimeSpan Position;
         public TimeSpan Duration;
         public BitmapSource Cover;
+        public string CoverKey = "";   // 这张封面属于哪首歌（title|artist|album）
     }
 
     /// <summary>
@@ -36,6 +37,8 @@ namespace DesktopDock.Services
         private GlobalSystemMediaTransportControlsSession _session;
 
         private string _loadedKey = "";
+        private int _lastCoverHash;
+        private string _lastCoverAlbum = "";
         private DateTimeOffset _lastRepick = DateTimeOffset.MinValue;
 
         public NowPlaying Current { get; } = new NowPlaying();
@@ -98,6 +101,7 @@ namespace DesktopDock.Services
                 Current.Artist = "";
                 Current.Album = "";
                 Current.Cover = null;
+                Current.CoverKey = "";
                 Notify();
             }
 
@@ -200,11 +204,38 @@ namespace DesktopDock.Services
                 Current.Album = props.AlbumTitle ?? "";
                 Current.HasSession = true;
 
-                BitmapSource cover = await ReadCoverAsync(props.Thumbnail);
-                if (cover != null) Current.Cover = cover;
-                else if (key != _loadedKey) Current.Cover = null;
-
+                // 换歌先清掉旧封面，否则新歌没有内嵌封面时，
+                // 会一直挂着上一首的图（就是"封面和音乐不同步"）
+                Current.Cover = null;
+                Current.CoverKey = "";
                 Notify();
+
+                var (cover, coverHash) = await ReadCoverAsync(props.Thumbnail);
+
+                // 播放器在切到"无封面"的歌时，往往继续吐上一张图。
+                // 判定：字节指纹和上一首完全相同，但专辑换了 → 认定为残留，不采用
+                bool albumChanged = !string.Equals(props.AlbumTitle ?? "", _lastCoverAlbum,
+                                                   StringComparison.Ordinal);
+                if (cover != null && albumChanged && coverHash != 0 && coverHash == _lastCoverHash)
+                {
+                    SettingsStore.Log("封面判定为播放器残留，丢弃: " + key);
+                    cover = null;
+                }
+                if (cover != null)
+                {
+                    _lastCoverHash = coverHash;
+                    _lastCoverAlbum = props.AlbumTitle ?? "";
+                }
+
+                // 等封面的这段时间里可能又换歌了，只在这个 key 仍是当前曲目时才应用
+                if (cover != null && key == _loadedKey)
+                SettingsStore.Log("封面读取 key=" + key + " 结果=" + (cover == null ? "null" : "ok") + " 当前key=" + _loadedKey);
+                {
+                    Current.Cover = cover;
+                    Current.CoverKey = key;
+                    SettingsStore.Log("封面采用 key=" + key + " 尺寸=" + cover.PixelWidth + "x" + cover.PixelHeight);
+                    Notify();
+                }
             }
             catch (Exception ex)
             {
@@ -213,16 +244,18 @@ namespace DesktopDock.Services
         }
 
         /// <summary>把封面缩略图读成 BitmapImage（后台线程建好后 Freeze，UI 直接用）</summary>
-        private static async Task<BitmapSource> ReadCoverAsync(IRandomAccessStreamReference reference)
+        /// <summary>把封面缩略图读成 BitmapImage；同时返回字节指纹，用于识别播放器残留的旧封面</summary>
+        private static async Task<(BitmapSource bmp, int hash)> ReadCoverAsync(
+            IRandomAccessStreamReference reference)
         {
-            if (reference == null) return null;
+            if (reference == null) return (null, 0);
 
             try
             {
                 using (IRandomAccessStreamWithContentType stream = await reference.OpenReadAsync())
                 {
                     uint size = (uint)stream.Size;
-                    if (size == 0 || size > 8 * 1024 * 1024) return null;
+                    if (size == 0 || size > 8 * 1024 * 1024) return (null, 0);
 
                     var bytes = new byte[size];
                     using (var reader = new DataReader(stream.GetInputStreamAt(0)))
@@ -230,6 +263,10 @@ namespace DesktopDock.Services
                         await reader.LoadAsync(size);
                         reader.ReadBytes(bytes);
                     }
+
+                    int h = 17;
+                    for (int i = 0; i < bytes.Length; i += 97) h = h * 31 + bytes[i];
+                    h ^= bytes.Length;
 
                     using (var ms = new MemoryStream(bytes))
                     {
@@ -239,13 +276,13 @@ namespace DesktopDock.Services
                         bitmap.StreamSource = ms;
                         bitmap.EndInit();
                         bitmap.Freeze();
-                        return bitmap;
+                        return (bitmap, h);
                     }
                 }
             }
             catch
             {
-                return null;
+                return (null, 0);
             }
         }
 
@@ -302,6 +339,7 @@ namespace DesktopDock.Services
                     Current.Title = "";
                     Current.Artist = "";
                     Current.Cover = null;
+                    Current.CoverKey = "";
                     Notify();
                 }
 

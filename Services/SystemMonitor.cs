@@ -47,6 +47,13 @@ namespace DesktopDock.Services
         public static double RamPercent { get; private set; }
         public static double GpuPercent { get; private set; }
 
+        /// <summary>按显示适配器拆开的 GPU 占用（0 = 第一个适配器，通常是核显）</summary>
+        public static double Gpu0Percent { get; private set; }
+        public static double Gpu1Percent { get; private set; }
+
+        /// <summary>磁盘活动时间（%）</summary>
+        public static double DiskPercent { get; private set; }
+
         private static ulong _lastIdle;
         private static ulong _lastKernel;
         private static ulong _lastUser;
@@ -61,6 +68,7 @@ namespace DesktopDock.Services
             SampleCpu();
             SampleRam();
             SampleGpu();
+            SampleDisk();
         }
 
         private static void SampleCpu()
@@ -130,19 +138,59 @@ namespace DesktopDock.Services
                     return;
                 }
 
-                double sum = 0;
-                foreach (PerformanceCounter counter in _gpuCounters)
+                // 实例名形如 pid_1234_luid_0x00000000_0x0000F6AC_phys_0_eng_0_engtype_3D
+                // 同一个 LUID = 同一块显卡，按 LUID 汇总就能拆成 GPU0 / GPU1
+                var byLuid = new Dictionary<string, double>(StringComparer.Ordinal);
+                for (int i = 0; i < _gpuCounters.Length; i++)
                 {
-                    try { sum += counter.NextValue(); }
-                    catch { /* 实例消失，下一轮重建 */ }
+                    double v = 0;
+                    try { v = _gpuCounters[i].NextValue(); }
+                    catch { continue; }
+
+                    string key = LuidKey(_gpuInstances[i]);
+                    if (!byLuid.ContainsKey(key)) byLuid[key] = 0;
+                    byLuid[key] += v;
                 }
 
+                double sum = 0;
+                foreach (var kv in byLuid) sum += kv.Value;
                 GpuPercent = Math.Max(0, Math.Min(100, sum));
+
+                var keys = new List<string>(byLuid.Keys);
+                keys.Sort(StringComparer.Ordinal);
+                Gpu0Percent = keys.Count > 0 ? Math.Max(0, Math.Min(100, byLuid[keys[0]])) : 0;
+                Gpu1Percent = keys.Count > 1 ? Math.Max(0, Math.Min(100, byLuid[keys[1]])) : 0;
             }
             catch (Exception ex)
             {
                 SettingsStore.Log("GPU 采集失败: " + ex.Message);
                 GpuPercent = 0;
+            }
+        }
+
+        private static readonly System.Text.RegularExpressions.Regex LuidRe =
+            new System.Text.RegularExpressions.Regex(@"luid_0x([0-9A-Fa-f]+)_0x([0-9A-Fa-f]+)");
+
+        private static string LuidKey(string instance)
+        {
+            var m = LuidRe.Match(instance ?? "");
+            return m.Success ? (m.Groups[1].Value + "_" + m.Groups[2].Value).ToUpperInvariant() : "?";
+        }
+
+        private static PerformanceCounter _diskCounter;
+
+        private static void SampleDisk()
+        {
+            try
+            {
+                if (_diskCounter == null)
+                    _diskCounter = new PerformanceCounter("PhysicalDisk", "% Disk Time", "_Total", true);
+                double v = _diskCounter.NextValue();
+                DiskPercent = Math.Max(0, Math.Min(100, v));
+            }
+            catch
+            {
+                DiskPercent = 0;
             }
         }
 

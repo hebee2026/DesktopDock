@@ -20,13 +20,14 @@
     <Product>桌面收纳盒</Product>
     <AssemblyTitle>桌面收纳盒</AssemblyTitle>
     <Description>鼠标贴屏幕左边滑出的桌面抽屉 + 壁纸时间 + 音乐与性能监视</Description>
-    <Version>1.5.2</Version>
-    <FileVersion>1.5.2.0</FileVersion>
-    <AssemblyVersion>1.5.2.0</AssemblyVersion>
+    <Version>1.6.0</Version>
+    <FileVersion>1.6.0.0</FileVersion>
+    <AssemblyVersion>1.6.0.0</AssemblyVersion>
   </PropertyGroup>
 
   <ItemGroup>
     <Resource Include="assets\app.ico" />
+
   </ItemGroup>
 
   <ItemGroup>

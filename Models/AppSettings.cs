@@ -197,6 +197,24 @@ namespace DesktopDock.Models
             get => _hudOffsetY;
             set => Set(ref _hudOffsetY, Math.Max(-4000, Math.Min(4000, value)));
         }
+        private double _hudTilt = 0;
+        private double _hudPerfOffsetX = 0, _hudPerfOffsetY = 0;
+        private double _hudMusicOffsetX = 0, _hudMusicOffsetY = 0;
+        private double _hudLyricOffsetX = 0, _hudLyricOffsetY = 0;
+
+        /// <summary>整体倾角（度），负值向左倒</summary>
+        public double HudTilt
+        {
+            get => _hudTilt;
+            set => Set(ref _hudTilt, Math.Max(-45, Math.Min(45, value)));
+        }
+
+        public double HudPerfOffsetX { get => _hudPerfOffsetX; set => Set(ref _hudPerfOffsetX, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudPerfOffsetY { get => _hudPerfOffsetY; set => Set(ref _hudPerfOffsetY, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudMusicOffsetX { get => _hudMusicOffsetX; set => Set(ref _hudMusicOffsetX, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudMusicOffsetY { get => _hudMusicOffsetY; set => Set(ref _hudMusicOffsetY, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudLyricOffsetX { get => _hudLyricOffsetX; set => Set(ref _hudLyricOffsetX, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudLyricOffsetY { get => _hudLyricOffsetY; set => Set(ref _hudLyricOffsetY, Math.Max(-2000, Math.Min(2000, value))); }
 
         private double _hudPerfBarWidth = 96;
 
@@ -204,7 +222,108 @@ namespace DesktopDock.Models
 
         /// <summary>是否显示专辑封面</summary>
         public bool HudShowCover { get => _hudShowCover; set => Set(ref _hudShowCover, value); }
-        private bool _widgetCustomColors = false;
+        private bool _hudShowTranslation = true;
+
+        /// <summary>双语歌词时，在当前句下面显示译文</summary>
+        public bool HudShowTranslation { get => _hudShowTranslation; set => Set(ref _hudShowTranslation, value); }
+        private bool _hudShowDisk = false;
+        private bool _hudShowGpu0 = false;
+        private bool _hudShowGpu1 = false;
+        private bool _hudShowLyrics = true;
+        private bool _hudShowBeat = true;
+
+        public bool HudShowDisk { get => _hudShowDisk; set => Set(ref _hudShowDisk, value); }
+        private bool _hudShowCpu = true;
+        private bool _hudShowRam = true;
+        private bool _hudShowGpu = true;
+
+        public bool HudShowCpu { get => _hudShowCpu; set => Set(ref _hudShowCpu, value); }
+        public bool HudShowRam { get => _hudShowRam; set => Set(ref _hudShowRam, value); }
+        public bool HudShowGpu { get => _hudShowGpu; set => Set(ref _hudShowGpu, value); }
+        public bool HudShowGpu0 { get => _hudShowGpu0; set => Set(ref _hudShowGpu0, value); }
+        public bool HudShowGpu1 { get => _hudShowGpu1; set => Set(ref _hudShowGpu1, value); }
+
+        /// <summary>歌词块开关</summary>
+        public bool HudShowLyrics { get => _hudShowLyrics; set => Set(ref _hudShowLyrics, value); }
+
+        /// <summary>节奏条开关</summary>
+        public bool HudShowBeat { get => _hudShowBeat; set => Set(ref _hudShowBeat, value); }
+        private double _hudBeatOffsetX = 0, _hudBeatOffsetY = 0;
+        private double _hudBeatBars = 32;
+        private double _hudTiltPerf = 0, _hudTiltMusic = 0, _hudTiltLyric = 0, _hudTiltBeat = 0;
+
+        public double HudBeatOffsetX { get => _hudBeatOffsetX; set => Set(ref _hudBeatOffsetX, Math.Max(-2000, Math.Min(2000, value))); }
+        public double HudBeatOffsetY { get => _hudBeatOffsetY; set => Set(ref _hudBeatOffsetY, Math.Max(-2000, Math.Min(2000, value))); }
+
+        /// <summary>节奏条柱子数量</summary>
+        public double HudBeatBars
+        {
+            get => _hudBeatBars;
+            set => Set(ref _hudBeatBars, Math.Max(8, Math.Min(160, value)));
+        }
+        private double _hudBeatHeight = 26;
+
+        /// <summary>节奏条高度（像素）</summary>
+        public double HudBeatHeight
+        {
+            get => _hudBeatHeight;
+            set => Set(ref _hudBeatHeight, Math.Max(8, Math.Min(90, value)));
+        }
+
+        /// <summary>各组件独立倾角（俯仰）</summary>
+        public double HudTiltPerf { get => _hudTiltPerf; set => Set(ref _hudTiltPerf, Math.Max(-30, Math.Min(30, value))); }
+        public double HudTiltMusic { get => _hudTiltMusic; set => Set(ref _hudTiltMusic, Math.Max(-30, Math.Min(30, value))); }
+        public double HudTiltLyric { get => _hudTiltLyric; set => Set(ref _hudTiltLyric, Math.Max(-30, Math.Min(30, value))); }
+        public double HudTiltBeat { get => _hudTiltBeat; set => Set(ref _hudTiltBeat, Math.Max(-30, Math.Min(30, value))); }
+        private double _hudLyricWidth = 0;
+        private double _hudPlayerWidth = 340;
+        private double _hudBeatBarWidth = 4;
+
+        /// <summary>歌词块最大宽度（dip）；0 = 跟着内容自适应</summary>
+        public double HudLyricWidth
+        {
+            get => _hudLyricWidth;
+            set => Set(ref _hudLyricWidth, Math.Max(0, Math.Min(2000, value)));
+        }
+
+        /// <summary>播放器信息区宽度（曲名/进度条）</summary>
+        public double HudPlayerWidth
+        {
+            get => _hudPlayerWidth;
+            set => Set(ref _hudPlayerWidth, Math.Max(160, Math.Min(1600, value)));
+        }
+
+        /// <summary>节奏柱粗细（1~12 px）</summary>
+        public double HudBeatBarWidth
+        {
+            get => _hudBeatBarWidth;
+            set => Set(ref _hudBeatBarWidth, Math.Max(1, Math.Min(14, value)));
+        }
+
+        private double _hudTitleFontSize = 14;
+        private double _hudArtistFontSize = 11;
+        private double _hudTimeFontSize = 10;
+
+        /// <summary>曲名字号</summary>
+        public double HudTitleFontSize
+        {
+            get => _hudTitleFontSize;
+            set => Set(ref _hudTitleFontSize, Math.Max(8, Math.Min(40, value)));
+        }
+
+        /// <summary>歌手字号</summary>
+        public double HudArtistFontSize
+        {
+            get => _hudArtistFontSize;
+            set => Set(ref _hudArtistFontSize, Math.Max(8, Math.Min(40, value)));
+        }
+
+        /// <summary>进度时间 / 状态字号</summary>
+        public double HudTimeFontSize
+        {
+            get => _hudTimeFontSize;
+            set => Set(ref _hudTimeFontSize, Math.Max(8, Math.Min(30, value)));
+        }        private bool _widgetCustomColors = false;
         private string _widgetTextColor = "#FFFFFF";
         private string _widgetSubColor = "#FFFFFF";
 
@@ -261,6 +380,14 @@ namespace DesktopDock.Models
         {
             get => _widgetFontSize;
             set => Set(ref _widgetFontSize, Math.Max(18, Math.Min(140, value)));
+        }
+        private int _widgetStyle = 0;
+
+        /// <summary>时钟样式：0 横排 / 1 竖排 / 2 极简 / 3 大字</summary>
+        public int WidgetStyle
+        {
+            get => _widgetStyle;
+            set => Set(ref _widgetStyle, Math.Max(0, Math.Min(3, value)));
         }
 
         /// <summary>壁纸时间距工作区右侧的距离（DIP）</summary>
