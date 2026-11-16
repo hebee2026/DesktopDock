@@ -33,11 +33,12 @@ namespace DesktopDock.Views
             Native.SetWindowLongPtr(_hwnd, Native.GWL_EXSTYLE, new IntPtr(ex));
 
             MoveTo(ScreenInfo.Primary);
-            SetVisible(true);
+            SetVisible(false);
         }
 
         public void SetVisible(bool visible)
         {
+            visible = false;
             _visible = visible;
             if (_hwnd == IntPtr.Zero) return;
 

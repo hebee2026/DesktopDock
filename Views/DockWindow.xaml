@@ -11,7 +11,7 @@
 
     <!-- 整块面板用 RenderTransform 做滑入滑出：窗口本身不动，动画全部走 GPU 合成，
          天然跟随显示器刷新率（144Hz 也不掉帧），不像逐帧 SetWindowPos 那样卡顿。 -->
-    <Border x:Name="Shell" CornerRadius="0,20,20,0" BorderBrush="#2BFFFFFF" BorderThickness="1,0,0,0"
+    <Border x:Name="Shell" CornerRadius="0,20,20,0" BorderBrush="Transparent" BorderThickness="0"
             RenderTransformOrigin="0,0.5">
         <Border.RenderTransform>
             <TranslateTransform x:Name="SlideX" X="-460" />

@@ -23,6 +23,9 @@ namespace DesktopDock.Views
         private readonly AppSettings _s;
         private readonly LocalPlayer _player;
 
+        /// <summary>当前列表里每一行对应的曲目下标（搜索过滤后就不是 0..n 了）</summary>
+        private readonly List<int> _visibleIndex = new List<int>();
+
         public PlaylistWindow(AppSettings settings, LocalPlayer player)
         {
             InitializeComponent();
@@ -145,12 +148,39 @@ namespace DesktopDock.Views
 
             int count = _player.LoadFolder(root);
 
-            var rows = new List<string>(count);
-            for (int i = 0; i < _player.Tracks.Count; i++)
-                rows.Add((i + 1).ToString("000") + "  " + Path.GetFileNameWithoutExtension(_player.Tracks[i]));
+            ApplyFilter(SearchBox.Text);
+        }
 
+        /// <summary>按关键字过滤（歌名/文件名，忽略大小写）</summary>
+        private void ApplyFilter(string keyword)
+        {
+            string key = (keyword ?? "").Trim();
+
+            var rows = new List<string>();
+            _visibleIndex.Clear();
+
+            for (int i = 0; i < _player.Tracks.Count; i++)
+            {
+                string title = Path.GetFileNameWithoutExtension(_player.Tracks[i]);
+                if (key.Length > 0 && title.IndexOf(key, StringComparison.CurrentCultureIgnoreCase) < 0)
+                    continue;
+
+                rows.Add((i + 1).ToString("000") + "  " + title);
+                _visibleIndex.Add(i);
+            }
+
+            TrackList.ItemsSource = null;
             TrackList.ItemsSource = rows;
-            TrackList.SelectedIndex = _player.HasTrack ? _player.Index : -1;
+
+            // 选中当前正在播的那首（如果它在结果里）
+            TrackList.SelectedIndex = _player.HasTrack ? _visibleIndex.IndexOf(_player.Index) : -1;
+
+            SearchHint.Visibility = string.IsNullOrEmpty(SearchBox.Text) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            ApplyFilter(SearchBox.Text);
         }
 
         private void SyncSelection()
@@ -177,10 +207,12 @@ namespace DesktopDock.Views
 
             if (!(element is ListBoxItem item)) return;
 
-            int index = TrackList.ItemContainerGenerator.IndexFromContainer(item);
-            if (index < 0 || index >= _player.Tracks.Count) return;
+            int row = TrackList.ItemContainerGenerator.IndexFromContainer(item);
+            if (row < 0 || row >= _visibleIndex.Count) return;
 
-            SettingsStore.Log("播放列表：点击第 " + index + " 行");
+            int index = _visibleIndex[row];   // 行号 → 曲目下标（过滤后两者不同）
+
+            SettingsStore.Log("播放列表：点击第 " + row + " 行 → 曲目 " + index);
             _player.Play(index);
         }
 

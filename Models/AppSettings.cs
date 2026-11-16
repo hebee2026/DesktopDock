@@ -238,6 +238,15 @@ namespace DesktopDock.Models
         private bool _hudShowGpu = true;
 
         public bool HudShowCpu { get => _hudShowCpu; set => Set(ref _hudShowCpu, value); }
+
+        private double _playerVolume = 0.8;
+        private int _playerMode = 0;
+
+        /// <summary>内置播放器音量 0~1</summary>
+        public double PlayerVolume { get => _playerVolume; set => Set(ref _playerVolume, Math.Max(0, Math.Min(1, value))); }
+
+        /// <summary>播放模式：0 顺序 / 1 单曲 / 2 随机</summary>
+        public int PlayerMode { get => _playerMode; set => Set(ref _playerMode, ((value % 3) + 3) % 3); }
         public bool HudShowRam { get => _hudShowRam; set => Set(ref _hudShowRam, value); }
         public bool HudShowGpu { get => _hudShowGpu; set => Set(ref _hudShowGpu, value); }
         public bool HudShowGpu0 { get => _hudShowGpu0; set => Set(ref _hudShowGpu0, value); }
@@ -245,6 +254,27 @@ namespace DesktopDock.Models
 
         /// <summary>歌词块开关</summary>
         public bool HudShowLyrics { get => _hudShowLyrics; set => Set(ref _hudShowLyrics, value); }
+        private bool _hudLyricAutoRefresh = true;
+
+        /// <summary>歌词索引自动重扫（关掉后只在换歌或手动刷新时读）</summary>
+        public bool HudLyricAutoRefresh { get => _hudLyricAutoRefresh; set => Set(ref _hudLyricAutoRefresh, value); }
+
+        private string _hudFontPerf = "";
+        private string _hudFontMusic = "";
+        private string _hudFontLyric = "";
+        private string _hudFontBeat = "";
+
+        /// <summary>性能块字体（空 = 跟随全局字体）</summary>
+        public string HudFontPerf { get => _hudFontPerf; set => Set(ref _hudFontPerf, value ?? ""); }
+
+        /// <summary>播放器字体</summary>
+        public string HudFontMusic { get => _hudFontMusic; set => Set(ref _hudFontMusic, value ?? ""); }
+
+        /// <summary>歌词字体</summary>
+        public string HudFontLyric { get => _hudFontLyric; set => Set(ref _hudFontLyric, value ?? ""); }
+
+        /// <summary>节奏条字体（标签用）</summary>
+        public string HudFontBeat { get => _hudFontBeat; set => Set(ref _hudFontBeat, value ?? ""); }
 
         /// <summary>节奏条开关</summary>
         public bool HudShowBeat { get => _hudShowBeat; set => Set(ref _hudShowBeat, value); }

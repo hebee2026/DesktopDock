@@ -60,18 +60,15 @@ namespace DesktopDock.Services
 
                         if (!isFolder)
                         {
+                            // 现在桌面上任何文件都收（文档/图片/压缩包…），
+                            // 只有需要靠扩展名区分的可执行文件才保留后缀
                             string ext = Path.GetExtension(name);
-                            if (!LaunchableExtensions.Contains(ext)) continue;
-                            if (!ext.Equals(".lnk", StringComparison.OrdinalIgnoreCase)
-                                && !ext.Equals(".url", StringComparison.OrdinalIgnoreCase)
-                                && !ext.Equals(".appref-ms", StringComparison.OrdinalIgnoreCase))
-                            {
-                                // .exe/.bat 之类保留扩展名，便于区分
-                            }
-                            else
-                            {
-                                name = Path.GetFileNameWithoutExtension(name);
-                            }
+                            bool keepExt = ext.Equals(".exe", StringComparison.OrdinalIgnoreCase)
+                                        || ext.Equals(".bat", StringComparison.OrdinalIgnoreCase)
+                                        || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase)
+                                        || ext.Equals(".ps1", StringComparison.OrdinalIgnoreCase)
+                                        || ext.Equals(".msc", StringComparison.OrdinalIgnoreCase);
+                            if (!keepExt) name = Path.GetFileNameWithoutExtension(name);
                         }
 
                         if (name.StartsWith("~$", StringComparison.Ordinal)) continue;

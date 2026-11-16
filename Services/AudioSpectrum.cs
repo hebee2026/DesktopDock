@@ -25,8 +25,10 @@ namespace DesktopDock.Services
 
         public string LastError { get; private set; } = "";
 
-        private const int FftLength = 2048;
-        private const int FftLog = 11;          // 2^11 = 2048
+        // 采样率 192kHz 时，2048 点分辨率只有 94Hz，低频段 40~300Hz 只够 3 个 bin。
+        // 提到 8192 点，分辨率约 23Hz，低频和细节都能分开。
+        private const int FftLength = 16384;
+        private const int FftLog = 14;          // 2^14 = 16384
 
         private WasapiLoopbackCapture _capture;
         private readonly float[] _ring = new float[FftLength];
@@ -40,6 +42,7 @@ namespace DesktopDock.Services
         private readonly int[] _bandLo = new int[BandCount];
         private readonly int[] _bandHi = new int[BandCount];
         private int _sampleRate = 48000;
+        private float _refPeak = 1e-5f;   // 归一化参考电平（慢衰减）
 
         public AudioSpectrum()
         {
@@ -74,7 +77,7 @@ namespace DesktopDock.Services
         private void BuildBands()
         {
             // 对数分频：低频段窄、高频段宽，和听感一致
-            double minHz = 40, maxHz = Math.Min(16000, _sampleRate / 2.0 - 100);
+            double minHz = 32, maxHz = Math.Min(18000, _sampleRate / 2.0 - 100);
             double binHz = (double)_sampleRate / FftLength;
             for (int b = 0; b < BandCount; b++)
             {
@@ -136,28 +139,33 @@ namespace DesktopDock.Services
 
                 FastFourierTransform.FFT(true, FftLog, _fft);
 
-                float max = 0.0001f;
                 var raw = new float[BandCount];
+                float frameMax = 0.0001f;
                 for (int b = 0; b < BandCount; b++)
                 {
-                    float sum = 0;
+                    // 取段内峰值：平均会把尖峰抹平，看着就"太平"
+                    float peak = 0;
                     for (int k = _bandLo[b]; k <= _bandHi[b]; k++)
                     {
                         float mag = (float)Math.Sqrt(_fft[k].X * _fft[k].X + _fft[k].Y * _fft[k].Y);
-                        sum += mag;
+                        if (mag > peak) peak = mag;
                     }
-                    raw[b] = sum / Math.Max(1, _bandHi[b] - _bandLo[b] + 1);
-                    if (raw[b] > max) max = raw[b];
+                    raw[b] = peak;
+                    if (peak > frameMax) frameMax = peak;
                 }
+
+                // 参考电平：取本帧峰值与上一帧衰减值的较大者，避免每帧重新归一化导致"永远满格"
+                _refPeak = Math.Max(frameMax, _refPeak * 0.94f);
+                if (_refPeak < 1e-5f) _refPeak = 1e-5f;
 
                 bool any = false;
                 for (int b = 0; b < BandCount; b++)
                 {
-                    // 归一化 + 开方压一下动态，再和上一帧做平滑（上升快、回落慢）
-                    float v = (float)Math.Sqrt(Math.Min(1f, raw[b] / max * 1.6f));
-                    if (v > 0.02f) any = true;
+                    float norm = Math.Min(1f, raw[b] / _refPeak);
+                    float v = (float)Math.Pow(norm, 0.75);   // 压暗部、拉亮尖峰
+                    if (v > 0.03f) any = true;
                     float prev = _smoothed[b];
-                    _smoothed[b] = v > prev ? prev + (v - prev) * 0.65f : prev + (v - prev) * 0.18f;
+                    _smoothed[b] = v > prev ? prev + (v - prev) * 0.92f : prev + (v - prev) * 0.10f;
                     Bands[b] = _smoothed[b];
                 }
                 HasSignal = any;

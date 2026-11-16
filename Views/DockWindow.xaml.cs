@@ -59,6 +59,12 @@ namespace DesktopDock.Views
         {
             InitializeComponent();
             _s = settings;
+
+            // 允许把文件从资源管理器拖进来（默认复制，按住 Shift 是移动）
+            AllowDrop = true;
+            DragOver += OnPanelDragOver;
+            DragLeave += OnPanelDragLeave;
+            Drop += OnPanelDrop;
             _s.PropertyChanged += OnSettingChanged;
 
             _clockTimer = new DispatcherTimer(DispatcherPriority.Background)
@@ -242,6 +248,106 @@ namespace DesktopDock.Views
             if (_hwnd != IntPtr.Zero) Native.ShowWindow(_hwnd, Native.SW_SHOWNOACTIVATE);
         }
 
+        // ───────────────────────── 拖放 ─────────────────────────
+
+        private void OnPanelDragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = e.Data.GetDataPresent(DataFormats.FileDrop) ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+            ShellBorderHint(true);
+        }
+
+        private void OnPanelDragLeave(object sender, DragEventArgs e)
+        {
+            ShellBorderHint(false);
+        }
+
+        /// <summary>拖进来时把面板描边点亮一点，给个视觉反馈</summary>
+        private void ShellBorderHint(bool on)
+        {
+            try
+            {
+                Shell.BorderBrush = on
+                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x66, 0xE8, 0xC7, 0x9B))
+                    : (System.Windows.Media.Brush)new System.Windows.Media.SolidColorBrush(
+                        System.Windows.Media.Color.FromArgb(0x2B, 0xFF, 0xFF, 0xFF));
+            }
+            catch { }
+        }
+
+        private void OnPanelDrop(object sender, DragEventArgs e)
+        {
+            ShellBorderHint(false);
+            if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
+
+            string[] paths = (string[])e.Data.GetData(DataFormats.FileDrop);
+            if (paths == null || paths.Length == 0) return;
+
+            // 默认复制；按住 Shift 改成移动（和资源管理器一致）
+            bool move = (e.KeyStates & DragDropKeyStates.ShiftKey) != 0;
+            string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+
+            int done = 0, failed = 0;
+            foreach (string src in paths)
+            {
+                try
+                {
+                    string name = Path.GetFileName(src.TrimEnd(Path.DirectorySeparatorChar));
+                    string dst = Path.Combine(desktop, name);
+
+                    if (string.Equals(Path.GetFullPath(src), Path.GetFullPath(dst), StringComparison.OrdinalIgnoreCase))
+                        continue;   // 本来就在桌面
+
+                    dst = MakeUnique(dst);
+
+                    if (Directory.Exists(src))
+                    {
+                        CopyDirectory(src, dst);
+                        if (move) Directory.Delete(src, true);
+                    }
+                    else
+                    {
+                        if (move) File.Move(src, dst);
+                        else File.Copy(src, dst, false);
+                    }
+                    done++;
+                }
+                catch (Exception ex)
+                {
+                    failed++;
+                    SettingsStore.Log("拖入失败 " + src + " : " + ex.Message);
+                }
+            }
+
+            SettingsStore.Log("拖入完成 成功=" + done + " 失败=" + failed);
+            _scanner.ScheduleReload();
+        }
+
+        /// <summary>重名时自动加 (2)(3)…</summary>
+        private static string MakeUnique(string path)
+        {
+            if (!File.Exists(path) && !Directory.Exists(path)) return path;
+
+            string dir = Path.GetDirectoryName(path);
+            string name = Path.GetFileNameWithoutExtension(path);
+            string ext = Path.GetExtension(path);
+            for (int i = 2; i < 1000; i++)
+            {
+                string candidate = Path.Combine(dir, name + " (" + i + ")" + ext);
+                if (!File.Exists(candidate) && !Directory.Exists(candidate)) return candidate;
+            }
+            return path;
+        }
+
+        private static void CopyDirectory(string source, string target)
+        {
+            Directory.CreateDirectory(target);
+            foreach (string file in Directory.GetFiles(source))
+                File.Copy(file, Path.Combine(target, Path.GetFileName(file)), true);
+            foreach (string sub in Directory.GetDirectories(source))
+                CopyDirectory(sub, Path.Combine(target, Path.GetFileName(sub)));
+        }
+
         /// <summary>窗口固定在屏幕左边缘，永不逐帧移动</summary>
         private void PlaceWindow(ScreenInfo mon)
         {
@@ -354,7 +460,7 @@ namespace DesktopDock.Views
             {
                 Rect rect = CurrentRectPx;
                 double sc = mon.Scale <= 0 ? 1.0 : mon.Scale;
-                int inset = (int)Math.Round(16 * sc);   // 让开左边缘那条提示条
+                int inset = 0;   // 必须从最左边缘开始抓，否则左侧会留一条没模糊的缝
                 int width = (int)rect.Width - inset;
                 int height = (int)rect.Height;
 
@@ -977,8 +1083,19 @@ namespace DesktopDock.Views
 
             if (item.IsFolder)
             {
-                TryOpenFolderExternal(item.Path);
-                return;   // 文件夹先不收起，等确认资源管理器是否真的打开了
+                // 点文件夹直接在面板里展开它的内容（二级菜单），不再弹资源管理器。
+                // 要开资源管理器，展开后右上角有「打开文件夹」按钮。
+                try
+                {
+                    ShowFolder(item.Path);
+                    SettingsStore.Log("展开文件夹: " + item.Path);
+                }
+                catch (Exception ex)
+                {
+                    SettingsStore.Log("展开文件夹失败，退回外壳: " + ex.Message);
+                    TryOpenFolderExternal(item.Path);
+                }
+                return;
             }
 
             if (!OpenPath(item.Path))
@@ -1114,6 +1231,17 @@ namespace DesktopDock.Views
             catch (Exception ex)
             {
                 SettingsStore.Log("启动失败 " + path + ": " + ex.Message);
+            }
+
+            // 有些文件类型外壳关联不起来（或低权限下被拦），交给资源管理器代开
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + path + "\"") { UseShellExecute = true });
+                return true;
+            }
+            catch (Exception ex2)
+            {
+                SettingsStore.Log("启动失败(explorer) " + path + ": " + ex2.Message);
                 return false;
             }
         }

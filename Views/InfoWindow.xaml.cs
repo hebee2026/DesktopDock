@@ -22,6 +22,8 @@ namespace DesktopDock.Views
     /// </summary>
     public partial class InfoWindow : Window
     {
+        /// <summary>外部触发「重新扫描歌词」用（设置面板的按钮调用）</summary>
+        public static Action ReloadLyricsExternal;
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_NOACTIVATE = 0x08000000;
         private const double MarginLogical = 52;
@@ -63,10 +65,39 @@ namespace DesktopDock.Views
             {
                 SystemMonitor.Sample();
                 UpdatePerf();
+
+            // 全屏应用切换分辨率后 HUD 还是旧尺寸，看起来往右偏；收到系统通知就重设
+            try { Microsoft.Win32.SystemEvents.DisplaySettingsChanged += (s2, e2) => Dispatcher.BeginInvoke(new Action(FitToScreen)); } catch { }
+
+            // 音量 / 播放模式初始化
+            try
+            {
+                VolumeSlider.Value = Math.Max(0, Math.Min(1, _s.PlayerVolume));
+                _local.Volume = VolumeSlider.Value;
+                _local.Mode = (LocalPlayer.PlayMode)_s.PlayerMode;
+                UpdateModeGlyph();
+
+                VolumeSlider.ValueChanged += (s3, e3) =>
+                {
+                    _local.Volume = VolumeSlider.Value;
+                    if (Math.Abs(_s.PlayerVolume - VolumeSlider.Value) > 0.001)
+                        _s.PlayerVolume = VolumeSlider.Value;
+                };
+            }
+            catch (Exception ex) { SettingsStore.Log("音量初始化失败: " + ex.Message); }
                 _media.Poll();
             };
 
             // 歌词/节奏条要更细的刷新
+            ReloadLyricsExternal = () =>
+            {
+                _lyricPath = "";
+                _lyricIndexAt = DateTime.MinValue;
+                GetLyricIndex(true);
+                UpdateMusic();
+                SettingsStore.Log("歌词已手动重扫");
+            };
+
             BuildBeatBars((int)Math.Round(_s.HudBeatBars));
             BuildExtraPerfRows();
             _beatTimer = new DispatcherTimer(DispatcherPriority.Render)
@@ -186,6 +217,10 @@ namespace DesktopDock.Views
                 case nameof(AppSettings.InfoHudShowPerf):
                 case nameof(AppSettings.InfoHudFontSize):
                 case nameof(AppSettings.InfoHudScale):
+                case nameof(AppSettings.HudFontPerf):
+                case nameof(AppSettings.HudFontMusic):
+                case nameof(AppSettings.HudFontLyric):
+                case nameof(AppSettings.HudFontBeat):
                 case nameof(AppSettings.HudFontFamilyName):
                 case nameof(AppSettings.HudPerfFontSize):
                 case nameof(AppSettings.HudLyricFontSize):
@@ -200,7 +235,16 @@ namespace DesktopDock.Views
                     ApplySettings();
                     break;
                 case nameof(AppSettings.HudBeatBars):
-                    BuildBeatBars((int)Math.Round(_s.HudBeatBars));
+                    ReloadLyricsExternal = () =>
+            {
+                _lyricPath = "";
+                _lyricIndexAt = DateTime.MinValue;
+                GetLyricIndex(true);
+                UpdateMusic();
+                SettingsStore.Log("歌词已手动重扫");
+            };
+
+            BuildBeatBars((int)Math.Round(_s.HudBeatBars));
                     ApplySettings();
                     ApplyPalette();   // 新建的柱子要重新上色
                     break;
@@ -256,12 +300,19 @@ namespace DesktopDock.Views
         {
             TextElement.SetFontFamily(Stack, ResolveFont());
 
+            // 各组件独立字体（空则继承全局）
+            TextElement.SetFontFamily(PerfBlock, ResolveFont(_s.HudFontPerf));
+            TextElement.SetFontFamily(MusicBlock, ResolveFont(_s.HudFontMusic));
+            TextElement.SetFontFamily(LyricBlock, ResolveFont(_s.HudFontLyric));
+            TextElement.SetFontFamily(BeatBlock, ResolveFont(_s.HudFontBeat));
+
             // 给偏移留出空间：内容周围加 260dip 的余量，
             // 否则把组件往左上挪一点就会被窗口边缘裁掉
             // 窗口已全屏，内容只留基础边距；位移交给 Transform
             Stack.Margin = new Thickness(52, 0, 0, 52);
 
             double s = Math.Max(0.6, Math.Min(2.2, _s.InfoHudScale));
+            _uiScale = s;
             double size = _s.InfoHudFontSize * s;
 
             // 整体缩放：字号、封面、细线、间距一起变
@@ -316,9 +367,11 @@ namespace DesktopDock.Views
                 return g;
             };
 
-            PerfBlock.RenderTransform = build(_s.HudPerfOffsetX, _s.HudPerfOffsetY, _s.HudTiltPerf);
+            // 性能块不旋转：旋转会让每行沿左边缘错开，看起来是阶梯状
+            // 只保留位移，六行永远竖向对齐
+            // 位移与「转门」压缩一起在 ApplyPerfSkew 里做
+            ApplyPerfSkew(_s.HudTiltPerf, _s.HudPerfOffsetX * s, -_s.HudPerfOffsetY * s);   // 转门效果
             PerfBlock.RenderTransformOrigin = new Point(0, 1);
-            CounterRotateText(PerfBlock, _s.HudTilt + _s.HudTiltPerf);
 
             // 播放器不受整体倾角影响：反向旋转把它抵消掉，只保留位置偏移
             var musicGroup = new TransformGroup();
@@ -366,6 +419,14 @@ namespace DesktopDock.Views
             LyricBlock.Width = _s.HudLyricWidth > 0 ? _s.HudLyricWidth * s : double.NaN;
             foreach (var _b in _beatBars) { _b.Width = _s.HudBeatBarWidth; }
             BeatBlock.Height = Math.Max(8, _s.HudBeatHeight * s);
+            // 播放器块高度固定：否则封面/歌词一出现，整块就往上顶
+            MusicBlock.MinHeight = 84 * s;
+            // 歌词块固定占位：4 行（上句/当前/译文/下句），否则歌词一出现就把上面顶上去
+            LyricBlock.MinHeight = Math.Max(48, _s.HudLyricFontSize * 4.2 + 16) * s;
+            // 译文行用 Hidden 而不是 Collapsed，保持同一首歌内高度不变
+            if (_s.HudShowTranslation)
+                LyricTrans.Visibility = string.IsNullOrWhiteSpace(LyricTrans.Text) ? Visibility.Hidden : Visibility.Visible;
+            MusicBlock.VerticalAlignment = VerticalAlignment.Top;
             ApplyExtraPerfFont(s);
             ApplyExtraPerfLayout(s);
             // 三行老的性能条：行距/条高/字号与新增行完全一致
@@ -403,6 +464,16 @@ namespace DesktopDock.Views
         {
             Place();
             UpdateMusic();
+        }
+
+        /// <summary>指定字体名则用它，否则回退到全局 HUD 字体</summary>
+        private FontFamily ResolveFont(string name)
+        {
+            if (!string.IsNullOrWhiteSpace(name))
+            {
+                try { return new FontFamily(name); } catch { }
+            }
+            return ResolveFont();
         }
 
         private FontFamily ResolveFont()
@@ -628,18 +699,19 @@ namespace DesktopDock.Views
             {
                 // 索引：歌名（小写）→ lrc 路径，覆盖「歌词文件夹」+ 整个「音乐」文件夹
                 string hit = FindLrc(GetLyricIndex(false), title, artist);
+                SettingsStore.Log("歌词查找 title=[" + title + "] artist=[" + artist + "] 索引=" + _lrcIndex.Count + " 命中=" + (hit ?? "无"));
                 if (hit == null)
                 {
                     // 可能是刚下载的新歌，缓存里还没有 → 强制重建后重试一次
                     hit = FindLrc(GetLyricIndex(true), title, artist);
                 }
-                if (hit != null) ParseLrc(hit);
+                if (hit != null) { ParseLrc(hit); SettingsStore.Log("歌词已解析 行数=" + _lyrics.Count + " 文件=" + hit); }
             }
             catch { }
         }
 
         /// <summary>在索引里找这首歌的 lrc；找不到返回 null</summary>
-        private static string FindLrc(System.Collections.Generic.Dictionary<string, string> index,
+        private string FindLrc(System.Collections.Generic.Dictionary<string, string> index,
                                       string title, string artist)
         {
             if (index == null || index.Count == 0) return null;
@@ -666,12 +738,28 @@ namespace DesktopDock.Views
                 if (kv.Key.IndexOf(t, StringComparison.OrdinalIgnoreCase) < 0) continue;
                 if (best == null || kv.Key.Length < best.Length) best = kv.Key;
             }
-            return best != null && index.TryGetValue(best, out string h2) ? h2 : null;
+            if (best != null && index.TryGetValue(best, out string h2)) return h2;
+
+            // 宽松匹配：去掉标点后比较（<Gv> 与 (Gv)、全角半角都能对上）
+            string looseKey = LooseKey(t);
+            if (looseKey.Length > 0 && _lrcLoose.TryGetValue(looseKey, out string h3)) return h3;
+
+            string bestLoose = null;
+            foreach (var kv in _lrcLoose)
+            {
+                if (looseKey.Length == 0) break;
+                if (kv.Key.IndexOf(looseKey, StringComparison.OrdinalIgnoreCase) < 0) continue;
+                if (bestLoose == null || kv.Key.Length < bestLoose.Length) bestLoose = kv.Key;
+            }
+            return bestLoose != null && _lrcLoose.TryGetValue(bestLoose, out string h4) ? h4 : null;
         }
 
         private readonly System.Collections.Generic.Dictionary<string, string> _lrcIndex =
             new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private DateTime _lyricIndexAt = DateTime.MinValue;
+        // 宽松索引：去掉所有标点/空格后建键，解决 <Gv> 与 (Gv) 这类差异
+        private readonly System.Collections.Generic.Dictionary<string, string> _lrcLoose =
+            new System.Collections.Generic.Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         private string _lyricIndexKey = "";
 
         /// <summary>
@@ -688,6 +776,7 @@ namespace DesktopDock.Views
                 return _lrcIndex;
 
             _lrcIndex.Clear();
+            _lrcLoose.Clear();
             _lyricIndexKey = key;
             _lyricIndexAt = DateTime.Now;
 
@@ -709,6 +798,8 @@ namespace DesktopDock.Views
                                           .Replace('+', ' ').Trim().ToLowerInvariant();
                         if (name.Length == 0) continue;
                         if (!_lrcIndex.ContainsKey(name)) _lrcIndex[name] = file;
+                        string loose = LooseKey(name);
+                        if (loose.Length > 0 && !_lrcLoose.ContainsKey(loose)) _lrcLoose[loose] = file;
 
                         // 同时登记去掉歌手前缀/后缀的版本，方便只按歌名命中
                         int sep = name.IndexOf(" - ", StringComparison.Ordinal);
@@ -727,6 +818,18 @@ namespace DesktopDock.Views
             return _lrcIndex;
         }
 
+        /// <summary>把歌名压成"只有字母数字和汉字"的形式，用于宽松匹配</summary>
+        private static string LooseKey(string s)
+        {
+            if (string.IsNullOrEmpty(s)) return "";
+            var sb = new System.Text.StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (char.IsLetterOrDigit(c)) sb.Append(char.ToLowerInvariant(c));
+            }
+            return sb.ToString();
+        }
+
         private void ParseLrc(string path)
         {
             try
@@ -736,9 +839,11 @@ namespace DesktopDock.Views
                 {
                     var m = System.Text.RegularExpressions.Regex.Match(raw, @"^\[(\d+):(\d+(?:\.\d+)?)\](.*)$");
                     if (!m.Success) continue;
+                    // 兼容增强型 LRC：<mm:ss.xxx> 是逐字时间标签，不能当正文显示
+                    string body = System.Text.RegularExpressions.Regex.Replace(m.Groups[3].Value, "<[^>]*>", "").Trim();
                     double t = int.Parse(m.Groups[1].Value) * 60 + double.Parse(m.Groups[2].Value,
                         System.Globalization.CultureInfo.InvariantCulture);
-                    string text = m.Groups[3].Value.Trim();
+                    string text = body;
                     if (text.Length > 0) all.Add((t, text));
                 }
                 all.Sort((a, b) => a.t.CompareTo(b.t));
@@ -779,7 +884,7 @@ namespace DesktopDock.Views
                 return;
             }
 
-            LyricBlock.Visibility = _lyrics.Count > 0 ? Visibility.Visible : Visibility.Hidden;
+            LyricBlock.Visibility = _lyrics.Count > 0 ? Visibility.Visible : Visibility.Hidden;   // Hidden 保留占位，避免整块上移
         }
 
         /// <summary>是否含中日韩汉字</summary>
@@ -850,7 +955,7 @@ namespace DesktopDock.Views
         private void TickBeat()
         {
             bool show = _playing && _beatBars.Count > 0 && MusicBlock.Visibility == Visibility.Visible;
-            BeatBlock.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            BeatBlock.Visibility = show ? Visibility.Visible : Visibility.Hidden;   // Hidden 保留高度，避免播放开始时整块上移
             if (!show) return;
 
             _spectrum.Update();
@@ -1001,12 +1106,44 @@ namespace DesktopDock.Views
             UpdateMusic();
         }
 
+        private void ModeButton_Click(object sender, RoutedEventArgs e)
+        {
+            e.Handled = true;
+            var mode = _local.CycleMode();
+            _s.PlayerMode = (int)mode;
+            UpdateModeGlyph();
+        }
+
+        /// <summary>按当前模式更新按钮图标与提示</summary>
+        private void UpdateModeGlyph()
+        {
+            switch (_local.Mode)
+            {
+                case LocalPlayer.PlayMode.RepeatOne:
+                    ModeButton.Content = "\uE8ED";
+                    ModeButton.ToolTip = "单曲循环";
+                    break;
+                case LocalPlayer.PlayMode.Shuffle:
+                    ModeButton.Content = "\uE8B1";
+                    ModeButton.ToolTip = "随机播放";
+                    break;
+                default:
+                    ModeButton.Content = "\uE8EE";
+                    ModeButton.ToolTip = "顺序播放";
+                    break;
+            }
+        }
+
         private void ListButton_Click(object sender, RoutedEventArgs e)
         {
             e.Handled = true;
 
-            if (_playlist == null) _playlist = new PlaylistWindow(_s, _local);
-            _playlist.ShowNear(this);
+            // 不再用自带的播放列表窗口，直接把 PotPlayer 呼到前台（播放列表就在 PotPlayer 里）
+            if (!BringPotPlayerToFront())
+            {
+                if (_playlist == null) _playlist = new PlaylistWindow(_s, _local);
+                _playlist.ShowNear(this);
+            }
         }
 
         protected override void OnClosed(EventArgs e)
@@ -1156,6 +1293,7 @@ namespace DesktopDock.Views
                     b.Background = aB;
                 foreach (var bar in _beatBars) bar.Background = aB;
                 ApplyExtraPerfPalette(mB, sB, Solid(Color.FromArgb(0x33, cAcc.R, cAcc.G, cAcc.B)), aB);
+                NormalizePerfText(sB, mB, _s.HudPerfFontSize * _uiScale);
                 Stack.Effect = null;
                 return;
             }
@@ -1199,6 +1337,8 @@ namespace DesktopDock.Views
             ProgressFill.Background = mainBrush;
             foreach (var bar in _beatBars) bar.Background = accentBrush;
             ApplyExtraPerfPalette(mainBrush, dimBrush, faintBrush, accentBrush);
+            // 六行标签统一亮度
+            NormalizePerfText(dimBrush, mainBrush, _s.HudPerfFontSize * _uiScale);
 
             Stack.Effect = light
                 ? new System.Windows.Media.Effects.DropShadowEffect
@@ -1206,14 +1346,14 @@ namespace DesktopDock.Views
                     BlurRadius = 14,
                     ShadowDepth = 0,
                     Color = Colors.White,
-                    Opacity = 0.5
+                    Opacity = 0.28
                 }
                 : new System.Windows.Media.Effects.DropShadowEffect
                 {
-                    BlurRadius = 22,
+                    BlurRadius = 18,
                     ShadowDepth = 0,
                     Color = Colors.Black,
-                    Opacity = 0.75
+                    Opacity = 0.38
                 };
         }
 

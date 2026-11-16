@@ -48,6 +48,7 @@
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
@@ -62,7 +63,21 @@
                         HorizontalAlignment="Right" VerticalAlignment="Top" ToolTip="关闭" Click="CloseBtn_Click" />
             </Grid>
 
-            <ListBox x:Name="TrackList" Grid.Row="1"
+            <Border Grid.Row="1" Margin="14,0,14,8" Height="30" CornerRadius="9" Background="#14FFFFFF">
+                <Grid>
+                    <TextBlock Text="&#xE721;" FontFamily="Segoe MDL2 Assets" FontSize="12"
+                               Foreground="#70FFFFFF" VerticalAlignment="Center" Margin="10,0,0,0"
+                               IsHitTestVisible="False" />
+                    <TextBox x:Name="SearchBox" Background="Transparent" BorderThickness="0"
+                             Foreground="#F2FFFFFF" CaretBrush="#F2FFFFFF" FontSize="12.5"
+                             Padding="28,0,10,0" VerticalContentAlignment="Center"
+                             TextChanged="SearchBox_TextChanged" />
+                    <TextBlock x:Name="SearchHint" Text="搜索歌名" FontSize="12.5" Foreground="#59FFFFFF"
+                               VerticalAlignment="Center" Margin="30,0,0,0" IsHitTestVisible="False" />
+                </Grid>
+            </Border>
+
+            <ListBox x:Name="TrackList" Grid.Row="2"
                      Background="Transparent" BorderThickness="0"
                      Padding="10,0,10,0"
                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
@@ -73,7 +88,7 @@
                      ItemTemplate="{StaticResource TrackTemplate}"
                      PreviewMouseLeftButtonUp="TrackList_PreviewMouseLeftButtonUp" />
 
-            <Border Grid.Row="2" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0" Padding="14,9">
+            <Border Grid.Row="3" BorderBrush="#14FFFFFF" BorderThickness="0,1,0,0" Padding="14,9">
                 <Grid>
                     <Button x:Name="RefreshBtn" Style="{StaticResource GhostButton}" Content="刷新列表"
                             Height="26" Width="86" HorizontalAlignment="Left" Click="RefreshBtn_Click" />

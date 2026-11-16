@@ -28,6 +28,19 @@ namespace DesktopDock.Services
 
         private bool _durationKnown;
 
+        public enum PlayMode { Sequential = 0, RepeatOne = 1, Shuffle = 2 }
+
+        /// <summary>播放模式：顺序 / 单曲循环 / 随机</summary>
+        public PlayMode Mode { get; set; } = PlayMode.Sequential;
+
+        /// <summary>切模式并返回新模式</summary>
+        public PlayMode CycleMode()
+        {
+            Mode = (PlayMode)(((int)Mode + 1) % 3);
+            Notify();
+            return Mode;
+        }
+
         public List<string> Tracks { get; private set; } = new List<string>();
         public int Index { get; private set; } = -1;
 
@@ -86,7 +99,22 @@ namespace DesktopDock.Services
                 Notify();
             };
 
-            _player.MediaEnded += (s, e) => Next();
+            _player.MediaEnded += (s, e) =>
+        {
+            // 单曲循环 / 随机 / 顺序
+            switch (Mode)
+            {
+                case PlayMode.RepeatOne:
+                    Play(Index);
+                    break;
+                case PlayMode.Shuffle:
+                    PlayRandomNext();
+                    break;
+                default:
+                    Next();
+                    break;
+            }
+        };
 
             _player.MediaFailed += (s, e) =>
             {
@@ -196,6 +224,43 @@ namespace DesktopDock.Services
                 IsPlaying = false;
                 Notify();
             }
+        }
+
+        /// <summary>随机下一首（不会立刻重复当前这首）</summary>
+        public void PlayRandomNext()
+        {
+            if (Tracks.Count == 0) return;
+            if (Tracks.Count == 1) { Play(0); return; }
+
+            var rnd = new Random();
+            int next = Index;
+            for (int i = 0; i < 20 && next == Index; i++)
+                next = rnd.Next(Tracks.Count);
+            Play(next);
+        }
+
+        /// <summary>音量 0~1</summary>
+        public double Volume
+        {
+            get => _player.Volume;
+            set
+            {
+                try { _player.Volume = Math.Max(0, Math.Min(1, value)); }
+                catch { }
+            }
+        }
+
+        public bool IsMuted { get; private set; }
+
+        public void ToggleMute()
+        {
+            try
+            {
+                IsMuted = !IsMuted;
+                _player.IsMuted = IsMuted;
+                Notify();
+            }
+            catch { }
         }
 
         public void TogglePlayPause()

@@ -27,9 +27,15 @@ namespace DesktopDock.Views
         private readonly TextBox _sub = new TextBox();
         private readonly TextBox _accent = new TextBox();
         private readonly TextBox _lyricsDir = new TextBox();
+        private readonly CheckBox _lyricAuto = new CheckBox { Content = "歌词自动重扫（每 2 分钟）" };
+        private readonly Button _lyricReload = new Button { Content = "立即重新扫描歌词", Height = 28, Margin = new Thickness(84, 4, 0, 4) };
 
         private readonly ComboBox _clockStyle = new ComboBox();
         private readonly CheckBox _clockCustom = new CheckBox { Content = "时间组件用自定义颜色" };
+        private readonly ComboBox _fontPerf = new ComboBox();
+        private readonly ComboBox _fontMusic = new ComboBox();
+        private readonly ComboBox _fontLyric = new ComboBox();
+        private readonly ComboBox _fontBeat = new ComboBox();
         private readonly CheckBox _wPerf = new CheckBox { Content = "性能块" };
         private readonly CheckBox _wMusic = new CheckBox { Content = "播放器" };
         private readonly CheckBox _wLyrics = new CheckBox { Content = "歌词" };
@@ -127,6 +133,22 @@ namespace DesktopDock.Views
             }
             panel.Children.Add(_font);
 
+            // 各组件独立字体
+            foreach (var cb in new[] { _fontPerf, _fontMusic, _fontLyric, _fontBeat })
+            {
+                foreach (object o in _font.Items) cb.Items.Add(o);
+                cb.Height = 26;
+                cb.Foreground = Brushes.Black;
+                cb.Background = Brushes.White;
+                cb.ItemContainerStyle = itemStyle;
+                cb.SelectedIndex = 0;
+            }
+            panel.Children.Add(Label("各组件字体", 12));
+            panel.Children.Add(ComboRow("性能块", _fontPerf));
+            panel.Children.Add(ComboRow("播放器", _fontMusic));
+            panel.Children.Add(ComboRow("歌词", _fontLyric));
+            panel.Children.Add(ComboRow("节奏条", _fontBeat));
+
             panel.Children.Add(Label("颜色", 14));
             _custom.Margin = new Thickness(0, 4, 0, 6);
             _custom.Foreground = BodyText;
@@ -153,6 +175,14 @@ namespace DesktopDock.Views
 
             panel.Children.Add(Label("歌词文件夹", 14));
             panel.Children.Add(Row("目录", _lyricsDir, false, true));
+            _lyricAuto.Margin = new Thickness(0, 6, 0, 2);
+            _lyricAuto.Foreground = BodyText;
+            panel.Children.Add(_lyricAuto);
+            _lyricReload.Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x3A, 0x3E));
+            _lyricReload.Foreground = BodyText;
+            _lyricReload.BorderThickness = new Thickness(0);
+            AnimateButton(_lyricReload);
+            panel.Children.Add(_lyricReload);
             panel.Children.Add(new TextBlock
             {
                 Text = "外部播放器（QQ音乐等）按「歌名 - 歌手.lrc」在这里找歌词",
@@ -271,6 +301,24 @@ namespace DesktopDock.Views
                 FontSize = 14,
                 Foreground = AccentText
             };
+        }
+
+        private static FrameworkElement ComboRow(string label, ComboBox cb)
+        {
+            var g = new Grid { Margin = new Thickness(0, 2, 0, 2) };
+            g.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(84) });
+            g.ColumnDefinitions.Add(new ColumnDefinition());
+            var t = new TextBlock
+            {
+                Text = label,
+                VerticalAlignment = VerticalAlignment.Center,
+                Opacity = 0.8,
+                Foreground = BodyText
+            };
+            Grid.SetColumn(cb, 1);
+            g.Children.Add(t);
+            g.Children.Add(cb);
+            return g;
         }
 
         private static FrameworkElement Row(string label, TextBox box, bool pickColor = false, bool pickFolder = false)
@@ -438,6 +486,11 @@ namespace DesktopDock.Views
                 ? "（默认：微软雅黑）" : _s.HudFontFamilyName;
             if (_font.SelectedIndex < 0) _font.SelectedIndex = 0;
 
+            SelectFont(_fontPerf, _s.HudFontPerf);
+            SelectFont(_fontMusic, _s.HudFontMusic);
+            SelectFont(_fontLyric, _s.HudFontLyric);
+            SelectFont(_fontBeat, _s.HudFontBeat);
+
             _custom.IsChecked = _s.HudCustomColors;
             _showCover.IsChecked = _s.HudShowCover;
             _showTrans.IsChecked = _s.HudShowTranslation;
@@ -445,6 +498,7 @@ namespace DesktopDock.Views
             _sub.Text = _s.HudSubColor;
             _accent.Text = _s.HudAccentColor;
             _lyricsDir.Text = _s.LyricsFolder;
+            _lyricAuto.IsChecked = _s.HudLyricAutoRefresh;
 
             _clockStyle.SelectedIndex = _s.WidgetStyle;
             if (_clockStyle.SelectedIndex < 0) _clockStyle.SelectedIndex = 0;
@@ -491,6 +545,13 @@ namespace DesktopDock.Views
             _tiltBeat.Value = _s.HudTiltBeat;
         }
 
+        private static void SelectFont(ComboBox cb, string name)
+        {
+            if (string.IsNullOrWhiteSpace(name)) { cb.SelectedIndex = 0; return; }
+            int i = cb.Items.IndexOf(name);
+            cb.SelectedIndex = i >= 0 ? i : 0;
+        }
+
         private void WireEvents()
         {
             _font.SelectionChanged += (s, e) =>
@@ -498,6 +559,11 @@ namespace DesktopDock.Views
                 if (_loading) return;
                 _s.HudFontFamilyName = _font.SelectedIndex <= 0 ? "" : (_font.SelectedItem as string ?? "");
             };
+
+            _fontPerf.SelectionChanged += (s, e) => { if (!_loading) _s.HudFontPerf = PickFont(_fontPerf); };
+            _fontMusic.SelectionChanged += (s, e) => { if (!_loading) _s.HudFontMusic = PickFont(_fontMusic); };
+            _fontLyric.SelectionChanged += (s, e) => { if (!_loading) _s.HudFontLyric = PickFont(_fontLyric); };
+            _fontBeat.SelectionChanged += (s, e) => { if (!_loading) _s.HudFontBeat = PickFont(_fontBeat); };
 
             _custom.Click += (s, e) => { if (!_loading) _s.HudCustomColors = _custom.IsChecked == true; };
             _showCover.Click += (s, e) => { if (!_loading) _s.HudShowCover = _showCover.IsChecked == true; };
@@ -507,6 +573,8 @@ namespace DesktopDock.Views
             _sub.TextChanged += (s, e) => { if (!_loading) { AutoCustom(); _s.HudSubColor = _sub.Text; } };
             _accent.TextChanged += (s, e) => { if (!_loading) { AutoCustom(); _s.HudAccentColor = _accent.Text; } };
             _lyricsDir.TextChanged += (s, e) => { if (!_loading) _s.LyricsFolder = _lyricsDir.Text; };
+            _lyricAuto.Click += (s, e) => { if (!_loading) _s.HudLyricAutoRefresh = _lyricAuto.IsChecked == true; };
+            _lyricReload.Click += (s, e) => { try { InfoWindow.ReloadLyricsExternal?.Invoke(); } catch { } };
 
             _clockStyle.SelectionChanged += (s, e) =>
             {
@@ -554,6 +622,10 @@ namespace DesktopDock.Views
             _tiltLyric.ValueChanged += (s, e) => { if (!_loading) _s.HudTiltLyric = _tiltLyric.Value; };
             _tiltBeat.ValueChanged += (s, e) => { if (!_loading) _s.HudTiltBeat = _tiltBeat.Value; };
         }
+
+        /// <summary>索引 0 = 跟随全局，返回空字符串</summary>
+        private static string PickFont(ComboBox cb)
+            => cb.SelectedIndex <= 0 ? "" : (cb.SelectedItem as string ?? "");
 
         private void AutoCustom()
         {

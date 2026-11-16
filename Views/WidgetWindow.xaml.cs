@@ -293,6 +293,9 @@ namespace DesktopDock.Views
             double baseSize = _s.WidgetFontSize;
             TimeText.FontSize = baseSize;
             SecondsText.FontSize = Math.Max(12, baseSize * 0.34);
+            // 手写体数字不等宽，固定宽度避免每秒变化把右边的日期推来推去
+            SecondsText.Width = Math.Max(24, SecondsText.FontSize * 1.35);
+            SecondsText.TextAlignment = TextAlignment.Center;
             PeriodText.FontSize = Math.Max(11, baseSize * 0.24);
             DateText.FontSize = Math.Max(13, baseSize * 0.30);
             WeekdayText.FontSize = Math.Max(12, baseSize * 0.24);
